@@ -215,6 +215,9 @@ body.marks-only .sidebar{display:none!important}
 body.marks-only .main{margin-left:0!important;width:100%!important}
 body.marks-only .app{display:block!important}
 body.marks-only .content{padding:14px}
+.regchk{flex-basis:100%;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px 12px;font-size:12px;color:#e2e8f0;line-height:1.9}
+.regchk label{display:inline-block;margin:0 14px 0 0;cursor:pointer}
+.regchk input{min-width:0;margin-right:4px}
 .ml-panel{margin-top:16px;border-top:1px dashed #cbd5e1;padding-top:12px}
 .ml-panel table td{vertical-align:middle}
 .ml-panel input.ml-url{width:100%;min-width:260px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px}
@@ -287,14 +290,14 @@ body.marks-only .content{padding:14px}
   <input id="regEmail" type="email" placeholder="Email">
   <input id="regPass" type="password" placeholder="Password (min 6)">
   <input id="regPass2" type="password" placeholder="Confirm password">
-  <select id="regSubXI" title="Class XI subject"><option value="">Class XI subject (if any)</option></select>
-  <select id="regSubMP" title="Class X subject"><option value="">Class X subject (if any)</option></select>
+  <div id="regSubXI" class="regchk" title="Class XI subjects"></div>
+  <div id="regSubMP" class="regchk" title="Class X subjects"></div>
   <button onclick="registerTeacher()" style="background:#16a34a;color:#fff">Submit for Approval</button>
   <span id="regMsg" style="font-size:13px"></span>
   <div id="regGuide" style="flex-basis:100%;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.7;color:#e2e8f0">
     <b>রেজিস্ট্রেশনের সহজ নিয়ম</b><br>
     ১. পুরো নাম, ইমেইল ও পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর) দিন, পাসওয়ার্ড আবার লিখুন।<br>
-    ২. Class XI ও/অথবা Class X-এর তালিকা থেকে আপনার বিষয় বেছে নিন (দুই ক্লাসেই পড়ালে দুটোতেই)।<br>
+    ২. Class XI ও/অথবা Class X-এর তালিকায় আপনি যে যে বিষয় পড়ান সবগুলোতে টিক দিন (একাধিক বিষয় হলে একসাথে একাধিক টিক)। সাঁওতালি মাধ্যমের শিক্ষক হলে SANT / Santali-তে টিক দিন।<br>
     ৩. "Submit for Approval" চাপুন। "Waiting for Headmaster approval" লেখা এলে আবেদন গেছে।<br>
     ৪. প্রধান শিক্ষক অনুমোদন দিলে একই লিঙ্ক আবার খুলে Sign In করুন (একই ইমেইল-পাসওয়ার্ড)।<br>
     ৫. Attendance Lock হওয়ার পর নম্বর এন্ট্রি করুন → Save Draft → শেষে Finalize &amp; Lock।
@@ -342,7 +345,7 @@ body.marks-only .content{padding:14px}
       <b>শিক্ষকদের জন্য সহজ নিয়ম</b><br>
       ১. লিঙ্ক খুলে "Register (New Teacher)" চাপুন।<br>
       ২. নাম, ইমেইল, পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর) দিন।<br>
-      ৩. Class XI / Class X-এর নিজের বিষয় বেছে "Submit for Approval" চাপুন।<br>
+      ৩. Class XI / Class X-এর নিজের সব বিষয়ে টিক দিয়ে "Submit for Approval" চাপুন।<br>
       ৪. প্রধান শিক্ষক অনুমোদন দিলে আবার লিঙ্ক খুলে Sign In করুন।<br>
       ৫. Attendance Lock হলে নম্বর এন্ট্রি করুন → Save Draft → Finalize &amp; Lock।
     </div>
@@ -528,6 +531,7 @@ body.marks-only .content{padding:14px}
     </div>
 
     <div id="schemeBox" class="scheme">Select a subject.</div>
+    <div id="marksMedNote" class="lockbox ok" style="margin-top:8px;display:none"></div>
     <div id="marksAttendanceMsg" class="lockbox" style="margin-top:8px;display:none"></div>
     <div class="lockbox ok" style="margin-top:8px">Protection: Staff/Teacher may edit assigned marks while OPEN. Finalized marks are read-only; only Admin can unlock. Marks entry for a subject is disabled until that subject's Attendance is Submitted &amp; Locked, and any student recorded ABSENT there is auto-locked out of marks entry.</div>
   </div>
@@ -828,6 +832,7 @@ body.marks-only .content{padding:14px}
       <button class="btn secondary" onclick="MP.printMarks()">Print</button>
     </div>
     <div class="scheme"><b>Mark Scheme:</b> Written Examination = 90 marks; IFE = 10 marks; Full Marks = 100. Result generation is disabled until every eligible student's marks are complete and the marks sheet is locked.</div>
+    <div id="mp_marksMedNote" class="lockbox ok" style="display:none;margin-top:8px"></div>
     <div id="mp_marksLockBox" class="lockbox">Select a subject.</div>
   </div>
   <div class="panel"><div class="tablewrap"><table><thead><tr><th>SL</th><th>B.S. Portal ID</th><th>Class</th><th>Sec</th><th>Roll</th><th>Name</th><th>Sex</th><th>Written / 90</th><th>IFE / 10</th><th>Total / 100</th><th>Entry Status</th></tr></thead><tbody id="mp_marksBody"></tbody></table></div></div>
@@ -1028,7 +1033,8 @@ function restrictSubjectSelects(fire){
     const el=document.getElementById(id); if(!el) return;
     [...el.options].forEach(o=>{
       if(!o.value) return;
-      const ok=isAdmin()||assignedToClass(cls,o.value);
+      let ok=isAdmin()||assignedToClass(cls,o.value);
+      const ls=window.__linkSel&&window.__linkSel[id]; if(ls&&!ls.has(String(o.value).toUpperCase())) ok=false;
       o.hidden=!ok; o.disabled=!ok;
     });
     const cur=el.selectedOptions[0];
@@ -1147,8 +1153,8 @@ function populateSubjects(){
   });
 
   SUBJECTS.forEach(s=>{
-    m.innerHTML+=`<option value="${s}">${s}</option>`;
-    c.innerHTML+=`<option value="${s}">${s}</option>`;
+    m.innerHTML+=`<option value="${s}">${s}${XI_NAMES[s]?' — '+XI_NAMES[s]:''}</option>`;
+    c.innerHTML+=`<option value="${s}">${s}${XI_NAMES[s]?' — '+XI_NAMES[s]:''}</option>`;
   });
 
   updateScheme();
@@ -1171,8 +1177,15 @@ function isSemI(){
   return exam==="SEM1"||exam==="SUPP";
 }
 
+function xiMedNote(s){
+  const n=document.getElementById("marksMedNote"); if(!n) return;
+  if(s==="SANT"){ n.style.display="block"; n.textContent="🟢 SANTALI MEDIUM — this sheet lists ONLY the students who have SANT (Santali) in their subject slots. Bengali (BNGA) has its own sheet and its own teacher."; }
+  else if(s==="BNGA"){ n.style.display="block"; n.textContent="BENGALI — this sheet lists only the students who have BNGA in their subject slots. Santali-medium students (SANT) are on the SANT sheet."; }
+  else n.style.display="none";
+}
 function updateScheme(){
   const s=document.getElementById("marksSubject").value;
+  xiMedNote(s);
   const x=SCHEMES[s];
   const compHeader=document.getElementById("compHeader");
 
@@ -2799,7 +2812,15 @@ async function loadMarks(){
     updateMarksLockUI();renderMarks();
   }catch(e){alert("Could not load marks: "+e.message)}
 }
+function mpMedNote(){
+  const n=document.getElementById("mp_marksMedNote"); if(!n) return;
+  const sb=document.getElementById("mp_marksSubject").value;
+  if(sb==="SANT"){ n.style.display="block"; n.textContent="🟢 SANTALI MEDIUM — only students whose 1st Language is Santali are listed ("+marksRows.length+"). Admin can change a student's 1st Language in Class X Students."; }
+  else if(sb==="BNGA"){ n.style.display="block"; n.textContent="BENGALI — only students whose 1st Language is Bengali are listed ("+marksRows.length+"). Santali-medium students are on the SANTHALI sheet."; }
+  else n.style.display="none";
+}
 function renderMarks(){
+  mpMedNote();
   const body=document.getElementById("mp_marksBody"),q=normalize(document.getElementById("mp_marksSearch").value).toLowerCase();
   const rows=marksRows.filter(r=>!q||keyOf(r.student).toLowerCase().includes(q)||nameOf(r.student).toLowerCase().includes(q));
   body.innerHTML=rows.map(r=>{
@@ -3084,7 +3105,7 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
         const label=c==='xi'?o.value:(o.value+' — '+o.textContent);
         const head=(c==='xi'?'Class XI — '+EXAM_LABEL[ex]:'Class X মাধ্যমিক MP (SE) 2027');
         const msg='নমস্কার স্যার/ম্যাডাম,\n\nTFHS-এ '+head+' — বিষয়: '+o.value+'-এর নম্বর অনলাইনে এন্ট্রি করতে নিচের লিঙ্কটি ব্যবহার করুন।\n\nলিঙ্ক: '+u+'\n\n'+
-'প্রথমবার যা করবেন:\n১. লিঙ্কটি মোবাইল বা কম্পিউটারে খুলুন।\n২. উপরে "Register (New Teacher)" বোতামে চাপ দিন।\n৩. পুরো নাম, ইমেইল ও পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর) দিন, পাসওয়ার্ড আবার লিখুন।\n৪. তালিকা (dropdown) থেকে আপনার বিষয় বেছে নিন। Class XI ও Class X দুটোতে পড়ালে দুই তালিকাতেই নিজের বিষয় বেছে নিন।\n৫. "Submit for Approval" চাপুন।\n৬. "Waiting for Headmaster approval" লেখা এলে বুঝবেন আবেদন গেছে। অনুমোদনের আগে নম্বর এন্ট্রি করা যাবে না।\n\n'+
+'প্রথমবার যা করবেন:\n১. লিঙ্কটি মোবাইল বা কম্পিউটারে খুলুন।\n২. উপরে "Register (New Teacher)" বোতামে চাপ দিন।\n৩. পুরো নাম, ইমেইল ও পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর) দিন, পাসওয়ার্ড আবার লিখুন।\n৪. আপনি যে যে বিষয় পড়ান সবগুলোতে টিক দিন (Class XI ও Class X দুটোতে পড়ালে দুই তালিকাতেই)। সাঁওতালি মাধ্যমের শিক্ষক হলে SANT / Santali-তে টিক দিন।\n৫. "Submit for Approval" চাপুন।\n৬. "Waiting for Headmaster approval" লেখা এলে বুঝবেন আবেদন গেছে। অনুমোদনের আগে নম্বর এন্ট্রি করা যাবে না।\n\n'+
 'অনুমোদনের পরে:\n৭. প্রধান শিক্ষক অনুমোদন দিলে একই লিঙ্ক আবার খুলুন এবং একই ইমেইল-পাসওয়ার্ড দিয়ে Sign In করুন।\n৮. আপনার বিষয়ের Attendance Submit ও Lock হওয়ার পরই নম্বর এন্ট্রি খুলবে।\n৯. নম্বর দিয়ে প্রথমে Save Draft করুন; সব মিলিয়ে দেখে শেষে Finalize & Lock করুন। Lock করার পর শুধু প্রধান শিক্ষক পরিবর্তন করতে পারবেন।\n\nকোনো সমস্যা হলে প্রধান শিক্ষকের সঙ্গে যোগাযোগ করুন। ধন্যবাদ।';
         return '<tr><td><b>'+esc(label)+'</b></td><td><input class="ml-url" readonly value="'+esc(u)+'"></td>'+
           '<td style="white-space:nowrap"><button class="btn light ml-copy" data-u="'+esc(u)+'">Copy</button> '+
@@ -3092,6 +3113,25 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
       }).join('');
       const out=box.querySelector('.ml-out');
       out.innerHTML='<table><thead><tr><th>Subject</th><th>Link</th><th>Share</th></tr></thead><tbody>'+rows+'</tbody></table>';
+      const lab=o=>c==='xi'?o.textContent:(o.value+' — '+o.textContent);
+      const mw=document.createElement('div'); mw.style.cssText='margin-top:14px;border-top:1px dashed #cbd5e1;padding-top:10px';
+      mw.innerHTML='<b>One teacher, several subjects — make ONE link</b><div style="font-size:12px;color:#64748b;margin:3px 0 6px">Tick the subjects this teacher teaches (e.g. SANT + ENGB), or tick "All subjects assigned to the teacher". The link opens a Subject box with only those subjects.</div><div>'+
+        '<label style="display:inline-block;margin:3px 12px 3px 0;font-size:12px"><input type="checkbox" class="ml-all"> <b>All subjects assigned to the teacher</b></label>'+
+        opts.map(o=>'<label style="display:inline-block;margin:3px 12px 3px 0;font-size:12px"><input type="checkbox" class="ml-chk" value="'+esc(o.value)+'"> '+esc(lab(o))+'</label>').join('')+
+        '</div><div class="toolbar" style="margin-top:8px"><input class="ml-url ml-murl" readonly placeholder="Tick subjects to build the link"><button class="btn light ml-mcopy">Copy</button> <a class="btn light ml-mwa" style="text-decoration:none;display:inline-block" target="_blank" rel="noopener" href="#">WhatsApp</a></div>';
+      out.appendChild(mw);
+      const updM=()=>{
+        const all=mw.querySelector('.ml-all').checked;
+        const picked=[...mw.querySelectorAll('.ml-chk:checked')].map(x=>x.value);
+        const murl=mw.querySelector('.ml-murl'), wa=mw.querySelector('.ml-mwa');
+        if(!all&&!picked.length){murl.value='';wa.href='#';return;}
+        const u=link(c,all?'*':picked.join(','),ex); murl.value=u;
+        const head=(c==='xi'?'Class XI — '+EXAM_LABEL[ex]:'Class X মাধ্যমিক MP (SE) 2027');
+        const m2='নমস্কার স্যার/ম্যাডাম,\n\nTFHS-এ '+head+' — '+(all?'আপনার সব বিষয়ের':'বিষয়: '+picked.join(', ')+'-এর')+' নম্বর অনলাইনে এন্ট্রি করতে নিচের একটি লিঙ্কই ব্যবহার করুন।\n\nলিঙ্ক: '+u+'\n\nপ্রথমবার: লিঙ্ক খুলে "Register (New Teacher)" চাপুন → নাম, ইমেইল, পাসওয়ার্ড দিন → আপনি যে যে বিষয় পড়ান সবগুলোতে টিক দিয়ে "Submit for Approval" চাপুন। প্রধান শিক্ষক অনুমোদন দিলে একই লিঙ্ক আবার খুলে Sign In করুন। লিঙ্ক খুললে "Subject" বক্স থেকে বিষয় বদলে নম্বর এন্ট্রি করতে পারবেন। সাঁওতালি মাধ্যমের শিক্ষক SANT বিষয় বেছে নেবেন।\n\nধন্যবাদ।';
+        wa.href='https://wa.me/?text='+encodeURIComponent(m2);
+      };
+      mw.querySelectorAll('input[type=checkbox]').forEach(x=>x.onchange=updM);
+      mw.querySelector('.ml-mcopy').onclick=async()=>{const v=mw.querySelector('.ml-murl').value; if(!v){alert('Tick at least one subject.');return;} try{await navigator.clipboard.writeText(v);}catch(e){prompt('Copy link:',v);}};
       out.querySelectorAll('.ml-copy').forEach(b=>b.onclick=async()=>{
         try{await navigator.clipboard.writeText(b.dataset.u);b.textContent='Copied ✔';setTimeout(()=>b.textContent='Copy',1500);}
         catch(e){prompt('Copy link:',b.dataset.u);}
@@ -3103,29 +3143,40 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
   addPanel('subjects','xi','marksSubject');
   addPanel('mp_programme','mp','mp_marksSubject');
 
-  /* ---------- Teacher: marks-only mode ---------- */
+  /* ---------- Teacher: marks-only mode ----------
+     sub=CODE            one subject
+     sub=CODE1,CODE2     several subjects (Subject box shows only these)
+     sub=*               every subject assigned to the logged-in teacher            */
   if(!(cls==='xi'||cls==='mp') || !sub) return;
+  const wanted=sub.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
+  const anySubs=wanted.includes('*');
+  const list=anySubs?[]:wanted;
+  const multi=anySubs||list.length>1;
   document.body.classList.add('marks-only');
   const viewId=cls==='xi'?'marks':'mp_marks';
   const selId=cls==='xi'?'marksSubject':'mp_marksSubject';
+  window.__linkSel=window.__linkSel||{}; window.__linkSel[selId]=anySubs?null:new Set(list);
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   const view=document.getElementById(viewId); view.classList.add('active');
 
-  const heading=(cls==='xi'?'Class XI — '+(EXAM_LABEL[exam]||exam):'Class X MP (SE) 2027')+' — '+sub;
+  const heading=(cls==='xi'?'Class XI — '+(EXAM_LABEL[exam]||exam):'Class X MP (SE) 2027')+' — '+(multi?'My subjects':list[0]);
   const tb=document.querySelector('.topbar strong'); if(tb) tb.textContent='TFHS Marks Entry';
   const ttl=view.querySelector('.title'); if(ttl) ttl.textContent='Marks Entry — '+heading;
   document.title='Marks Entry — '+heading;
 
-  /* lock subject / exam pickers: this link serves one subject only */
+  /* single-subject link hides the Subject box; multi-subject link keeps it so the teacher can switch */
   const selEl=document.getElementById(selId);
-  if(selEl&&selEl.closest('.field')) selEl.closest('.field').style.display='none';
+  if(selEl&&selEl.closest('.field')) selEl.closest('.field').style.display=multi?'':'none';
   if(cls==='xi'){
     const ex=document.getElementById('marksExam');
-    if(ex){ex.value=EXAM_LABEL[exam]?exam:'SEM1'; if(ex.closest('.field')) ex.closest('.field').style.display='none';}
+    if(ex){
+      if(P.has('exam')){ ex.value=EXAM_LABEL[exam]?exam:'SEM1'; if(ex.closest('.field')) ex.closest('.field').style.display='none'; }
+      else if(!ex.value) ex.value='SEM1';
+    }
   }
   const note=document.createElement('div'); note.className='lockbox'; note.style.margin='0 0 10px';
   const sb=view.querySelector('.subtitle'); (sb||ttl).insertAdjacentElement('afterend',note);
-  note.textContent='Sign in above with your staff email & password to open this subject. New teacher? Click Register (Headmaster approval needed).';
+  note.textContent='Sign in above with your staff email & password to open '+(multi?'your subjects':'this subject')+'. New teacher? Click Register (Headmaster approval needed).';
 
   let busy=false,loads=0,tries=0,done=false;
   const t=setInterval(async()=>{
@@ -3133,16 +3184,25 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
     if(++tries>600){clearInterval(t);return;}
     if(typeof canMarks!=='function'||!canMarks()){ if(typeof roleIs==='function'&&roleIs('pending')) note.textContent='Registered — waiting for Headmaster approval. Reopen this link after approval.'; return; }
     const sel=document.getElementById(selId);
-    const opt=[...sel.options].find(o=>o.value.toUpperCase()===sub.toUpperCase());
-    if(!opt){ if(tries>20) note.textContent='Subject "'+sub+'" not found. Ask the Headmaster for a correct link.'; return; }
-    if(!isAdmin() && !assignedToClass(cls,opt.value)){
-      note.textContent='Subject '+opt.value+' is not assigned to your account. Ask the Headmaster.'; done=true; clearInterval(t); return;
+    let opt;
+    if(!multi){
+      opt=[...sel.options].find(o=>o.value.toUpperCase()===list[0]);
+      if(!opt){ if(tries>20) note.textContent='Subject "'+list[0]+'" not found. Ask the Headmaster for a correct link.'; return; }
+      if(!isAdmin() && !assignedToClass(cls,opt.value)){
+        note.textContent='Subject '+opt.value+' is not assigned to your account. Ask the Headmaster.'; done=true; clearInterval(t); return;
+      }
+    }else{
+      const avail=[...sel.options].filter(o=>o.value&&!o.disabled);
+      if(!avail.length){ if(tries>20) note.textContent='No subject on this link is assigned to your account. Ask the Headmaster.'; return; }
+      opt=avail.find(o=>o.value===sel.value)||avail[0];
     }
     if(cls==='xi' && !students.length) return;
     busy=true;
     try{
       sel.value=opt.value;
-      note.textContent='Opened: '+heading+' — marks open only after this subject\'s Attendance is Submitted & Locked.';
+      note.textContent=multi
+        ? 'Opened: '+heading+' ('+[...sel.options].filter(o=>o.value&&!o.disabled).map(o=>o.value).join(', ')+') — choose the subject in the Subject box. Marks open only after that subject\'s Attendance is Submitted & Locked.'
+        : 'Opened: '+heading+' — marks open only after this subject\'s Attendance is Submitted & Locked.';
       if(cls==='xi'){ if(typeof updateScheme==='function') updateScheme(); await loadMarks(); done=true; }
       else{
         await MP.loadMarks(); loads++;
@@ -3173,12 +3233,15 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
     const fromSel=(id,tgt)=>{ const e=document.getElementById(id); if(e) [...e.options].forEach(o=>{ if(o.value) tgt[o.value.toUpperCase()]=1; }); };
     fromSel('marksSubject',xi); fromSel('mp_marksSubject',mp);
     Object.keys(MP_NAMES).forEach(k=>mp[k]=1);
-    const xl=c=>c+(XI_NAMES[c]?' - '+XI_NAMES[c]:'');
-    const ml=c=>(MP_NAMES[c]||c);
-    xs.innerHTML='<option value="">Class XI subject (if any)</option>'+Object.keys(xi).sort().map(c=>'<option value="'+esc(c)+'">'+esc(xl(c))+'</option>').join('');
-    ms.innerHTML='<option value="">Class X subject (if any)</option>'+Object.keys(mp).sort((a,b)=>ml(a).localeCompare(ml(b))).map(c=>'<option value="'+esc(c)+'">'+esc(ml(c))+'</option>').join('');
-    const pre=sub0.split(',')[0].replace(/^(XI|MP):/i,'').trim().toUpperCase();
-    if(pre){ if(m0==='mp'){ if(mp[pre]) ms.value=pre; } else if(xi[pre]) xs.value=pre; }
+    const med=c=>c==='SANT'?' (Santali medium)':'';
+    const xl=c=>c+(XI_NAMES[c]?' - '+XI_NAMES[c]:'')+med(c);
+    const ml=c=>(MP_NAMES[c]||c)+med(c);
+    const pre=sub0.split(',').map(x=>x.trim().toUpperCase()).filter(x=>x&&x!=='*');
+    const wantXI=pre.filter(t=>t.startsWith('XI:')).map(t=>t.slice(3)), wantMP=pre.filter(t=>t.startsWith('MP:')).map(t=>t.slice(3)), plain=pre.filter(t=>!t.includes(':'));
+    const isOn=(c,own)=>own.includes(c)||plain.includes(c);
+    const box=(title,codes,labelOf,own)=>'<div style="font-weight:800;margin-bottom:2px">'+title+'</div>'+codes.map(c=>'<label><input type="checkbox" value="'+esc(c)+'"'+(isOn(c,own)?' checked':'')+'> '+esc(labelOf(c))+'</label>').join('');
+    xs.innerHTML=box('Class XI — tick every subject you teach',Object.keys(xi).sort(),xl,wantXI);
+    ms.innerHTML=box('Class X — tick every subject you teach',Object.keys(mp).sort((a,b)=>ml(a).localeCompare(ml(b))),ml,wantMP);
     xs.style.display=(m0==='mp')?'none':''; ms.style.display=(m0==='xi')?'none':'';
     xs.dataset.filled='1';
   }
@@ -3187,9 +3250,10 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
   window.registerTeacher=async function(){
     const name=$('regName').value.trim(), email=$('regEmail').value.trim(), p1=$('regPass').value, p2=$('regPass2').value, msg=$('regMsg');
     const signed=auth.currentUser&&!auth.currentUser.isAnonymous;
-    const subReq=[($('regSubXI')||{}).value?'XI:'+$('regSubXI').value:'',($('regSubMP')||{}).value?'MP:'+$('regSubMP').value:''].filter(Boolean).join(',');
+    const chk=(id,pf)=>[...document.querySelectorAll('#'+id+' input:checked')].map(x=>pf+':'+x.value);
+    const subReq=chk('regSubXI','XI').concat(chk('regSubMP','MP')).join(',');
     if(!name){msg.textContent='Enter full name.';return;}
-    if(!subReq){msg.textContent='Select your Class XI and/or Class X subject.';return;}
+    if(!subReq){msg.textContent='Tick at least one subject (you can tick several).';return;}
     if(!signed){
       if(!email){msg.textContent='Enter email.';return;}
       if(p1.length<6){msg.textContent='Password must be at least 6 characters.';return;}
