@@ -290,6 +290,7 @@ body.marks-only .content{padding:14px}
   <input id="regEmail" type="email" placeholder="Email">
   <input id="regPass" type="password" placeholder="Password (min 6)">
   <input id="regPass2" type="password" placeholder="Confirm password">
+  <div id="regMed" class="regchk" title="Medium"></div>
   <div id="regSubXI" class="regchk" title="Class XI subjects"></div>
   <div id="regSubMP" class="regchk" title="Class X subjects"></div>
   <button onclick="registerTeacher()" style="background:#16a34a;color:#fff">Submit for Approval</button>
@@ -297,7 +298,7 @@ body.marks-only .content{padding:14px}
   <div id="regGuide" style="flex-basis:100%;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.7;color:#e2e8f0">
     <b>রেজিস্ট্রেশনের সহজ নিয়ম</b><br>
     ১. পুরো নাম, ইমেইল ও পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর) দিন, পাসওয়ার্ড আবার লিখুন।<br>
-    ২. Class XI ও/অথবা Class X-এর তালিকায় আপনি যে যে বিষয় পড়ান সবগুলোতে টিক দিন (একাধিক বিষয় হলে একসাথে একাধিক টিক)। সাঁওতালি মাধ্যমের শিক্ষক হলে SANT / Santali-তে টিক দিন।<br>
+    ২. আগে মাধ্যম (Bengali / Santali / দুটোই) বেছে নিন। তারপর Class XI ও/অথবা Class X-এর তালিকায় আপনি যে যে বিষয় পড়ান সবগুলোতে টিক দিন (একাধিক বিষয় হলে একসাথে একাধিক টিক)। Bengali মাধ্যম বেছে নিলে BNGA, Santali মাধ্যম বেছে নিলে SANT দেখাবে।<br>
     ৩. "Submit for Approval" চাপুন। "Waiting for Headmaster approval" লেখা এলে আবেদন গেছে।<br>
     ৪. প্রধান শিক্ষক অনুমোদন দিলে একই লিঙ্ক আবার খুলে Sign In করুন (একই ইমেইল-পাসওয়ার্ড)।<br>
     ৫. Attendance Lock হওয়ার পর নম্বর এন্ট্রি করুন → Save Draft → শেষে Finalize &amp; Lock।
@@ -336,6 +337,9 @@ body.marks-only .content{padding:14px}
     <div class="toolbar">
       <div class="field"><label>For</label>
         <select id="shReg"><option value="">Class XI &amp; Class X (both)</option><option value="xi">Class XI only</option><option value="mp">Class X only</option></select>
+      </div>
+      <div class="field"><label>Medium</label>
+        <select id="shMed"><option value="">Any medium (teacher chooses)</option><option value="bn">Bengali medium</option><option value="sant">Santali medium</option><option value="both">Bengali + Santali</option></select>
       </div>
       <div class="field" style="flex:1;min-width:240px"><label>Link</label><input id="shLink" readonly></div>
       <button class="btn light" id="shCopy">Copy Link</button>
@@ -3224,6 +3228,19 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
   const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const sub0=(new URLSearchParams(location.search).get('sub')||'').trim();
   const m0=(new URLSearchParams(location.search).get('m')||'').toLowerCase();
+  const med0=(new URLSearchParams(location.search).get('med')||'').toLowerCase();
+  const MEDS=[['BENGALI','Bengali medium','BNGA'],['SANTALI','Santali medium','SANT']];
+  const LANG2MED={BNGA:'BENGALI',SANT:'SANTALI'};
+  function selMeds(){ return [...document.querySelectorAll('#regMed input:checked')].map(x=>x.value); }
+  function applyMedium(){
+    const on=new Set(selMeds());
+    document.querySelectorAll('#regSubXI input,#regSubMP input').forEach(i=>{
+      const m=LANG2MED[i.value]; if(!m) return;
+      const lab=i.closest('label'); const ok=on.has(m);
+      if(!ok) i.checked=false;
+      i.disabled=!ok; if(lab) lab.style.display=ok?'':'none';
+    });
+  }
   const $=id=>document.getElementById(id);
 
   function fillRegSubjects(){
@@ -3240,10 +3257,15 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
     const wantXI=pre.filter(t=>t.startsWith('XI:')).map(t=>t.slice(3)), wantMP=pre.filter(t=>t.startsWith('MP:')).map(t=>t.slice(3)), plain=pre.filter(t=>!t.includes(':'));
     const isOn=(c,own)=>own.includes(c)||plain.includes(c);
     const box=(title,codes,labelOf,own)=>'<div style="font-weight:800;margin-bottom:2px">'+title+'</div>'+codes.map(c=>'<label><input type="checkbox" value="'+esc(c)+'"'+(isOn(c,own)?' checked':'')+'> '+esc(labelOf(c))+'</label>').join('');
+    const medPre=(med0==='bn'?['BENGALI']:med0==='sant'?['SANTALI']:med0==='both'?['BENGALI','SANTALI']:[]);
+    if(!medPre.length && plain.concat(wantXI,wantMP).includes('SANT')) medPre.push('SANTALI');
+    const mb=$('regMed');
+    mb.innerHTML='<div style="font-weight:800;margin-bottom:2px">Medium — tick the medium you teach (both if you teach both)</div>'+MEDS.map(m=>'<label><input type="checkbox" value="'+m[0]+'"'+(medPre.includes(m[0])?' checked':'')+'> '+m[1]+'</label>').join('');
+    mb.querySelectorAll('input').forEach(i=>i.onchange=applyMedium);
     xs.innerHTML=box('Class XI — tick every subject you teach',Object.keys(xi).sort(),xl,wantXI);
     ms.innerHTML=box('Class X — tick every subject you teach',Object.keys(mp).sort((a,b)=>ml(a).localeCompare(ml(b))),ml,wantMP);
     xs.style.display=(m0==='mp')?'none':''; ms.style.display=(m0==='xi')?'none':'';
-    xs.dataset.filled='1';
+    xs.dataset.filled='1'; applyMedium();
   }
   window.toggleRegister=function(){const b=$('regBox'); fillRegSubjects(); b.style.display=(b.style.display==='none')?'flex':'none';};
 
@@ -3253,6 +3275,8 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
     const chk=(id,pf)=>[...document.querySelectorAll('#'+id+' input:checked')].map(x=>pf+':'+x.value);
     const subReq=chk('regSubXI','XI').concat(chk('regSubMP','MP')).join(',');
     if(!name){msg.textContent='Enter full name.';return;}
+    const medReq=selMeds();
+    if(!medReq.length){msg.textContent='Tick your medium (Bengali / Santali / both).';return;}
     if(!subReq){msg.textContent='Tick at least one subject (you can tick several).';return;}
     if(!signed){
       if(!email){msg.textContent='Enter email.';return;}
@@ -3265,7 +3289,7 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
     try{
       let user=auth.currentUser;
       if(!signed){ const cred=await auth.createUserWithEmailAndPassword(email,p1); user=cred.user; }
-      await db.collection('users').doc(user.uid).set({name,email:user.email||email,role:'pending',assignedSubjects:[],requestedSubject:subReq,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+      await db.collection('users').doc(user.uid).set({name,email:user.email||email,role:'pending',assignedSubjects:[],requestedSubject:subReq,requestedMedium:medReq.join(','),medium:[],createdAt:firebase.firestore.FieldValue.serverTimestamp()});
       await loadUserRole(user);
       msg.textContent='Registered. Waiting for Headmaster approval — reopen your link after approval.';
       $('regPass').value='';$('regPass2').value='';
@@ -3323,8 +3347,11 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
         if(role==='admin') return '<tr><td><b>'+esc(u.name||'')+'</b><br><small>'+esc(u.email||u.uid)+'</small></td><td>—</td><td><b>ADMIN</b></td><td>All</td><td>—</td></tr>';
         const roleSel='<select class="st-role">'+['pending','teacher','staff','invigilator','rejected'].map(r=>'<option value="'+r+'"'+(r===role?' selected':'')+'>'+r+'</option>').join('')+(['pending','teacher','staff','invigilator','rejected'].includes(role)?'':'<option value="'+esc(role)+'" selected>'+esc(role)+'</option>')+'</select>';
         const lab=(cl,c,t,on)=>'<label style="display:inline-block;margin:2px 8px 2px 0;font-size:12px"><input type="checkbox" class="'+cl+'" value="'+esc(c)+'"'+(on?' checked':'')+'> '+esc(t)+'</label>';
-        const boxes='<div><b>Class XI</b><br>'+xiCodes.map(c=>lab('st-xi',c,c+(XI_NAMES[c]?' - '+XI_NAMES[c]:''),preXI.includes(c))).join('')+'</div><div style="margin-top:6px"><b>Class X</b><br>'+mpCodes.map(c=>lab('st-mp',c,MP_NAMES[c]||c,preMP.includes(c))).join('')+'</div>';
-        return '<tr data-uid="'+esc(u.uid)+'"><td><b>'+esc(u.name||'(no name)')+'</b><br><small>'+esc(u.email||u.uid)+'</small></td><td>'+esc(u.requestedSubject||'—')+'</td><td>'+roleSel+'</td><td style="min-width:220px">'+boxes+'</td><td><button class="btn success" onclick="saveStaff(this)">Save</button></td></tr>';
+        const reqMed=String(u.requestedMedium||'').split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
+        const curMed=('medium' in u&&listValue(u.medium).length)?up(u.medium):reqMed;
+        const medBoxes='<div style="margin-bottom:6px"><b>Medium</b><br>'+[['BENGALI','Bengali'],['SANTALI','Santali']].map(m=>lab('st-med',m[0],m[1],curMed.includes(m[0]))).join('')+'</div>';
+        const boxes=medBoxes+'<div><b>Class XI</b><br>'+xiCodes.map(c=>lab('st-xi',c,c+(XI_NAMES[c]?' - '+XI_NAMES[c]:''),preXI.includes(c))).join('')+'</div><div style="margin-top:6px"><b>Class X</b><br>'+mpCodes.map(c=>lab('st-mp',c,MP_NAMES[c]||c,preMP.includes(c))).join('')+'</div>';
+        return '<tr data-uid="'+esc(u.uid)+'"><td><b>'+esc(u.name||'(no name)')+'</b><br><small>'+esc(u.email||u.uid)+'</small></td><td>'+esc(u.requestedSubject||'—')+(u.requestedMedium?'<br><small><b>Medium:</b> '+esc(u.requestedMedium)+'</small>':'')+'</td><td>'+roleSel+'</td><td style="min-width:220px">'+boxes+'</td><td><button class="btn success" onclick="saveStaff(this)">Save</button></td></tr>';
       }).join('')||'<tr><td colspan="5">No users.</td></tr>';
       msg.textContent=list.filter(u=>String(u.role).toLowerCase()==='pending').length+' pending';
     }catch(e){msg.textContent='Could not load: '+e.message;}
@@ -3336,10 +3363,14 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
     const isT=(role==='teacher'||role==='staff');
     const xiS=isT?[...tr.querySelectorAll('.st-xi:checked')].map(x=>x.value):[];
     const mpS=isT?[...tr.querySelectorAll('.st-mp:checked')].map(x=>x.value):[];
+    const medS=isT?[...tr.querySelectorAll('.st-med:checked')].map(x=>x.value):[];
+    if(isT&&!medS.length){alert('Tick the medium (Bengali and/or Santali) for this teacher.');return;}
+    const badLang=c=>(c==='BNGA'&&!medS.includes('BENGALI'))||(c==='SANT'&&!medS.includes('SANTALI'));
+    if(isT){ for(let i=xiS.length-1;i>=0;i--) if(badLang(xiS[i])) xiS.splice(i,1); for(let i=mpS.length-1;i>=0;i--) if(badLang(mpS[i])) mpS.splice(i,1); }
     const subs=[...new Set(xiS.concat(mpS))];
     if(isT&&!subs.length){alert('Tick at least one subject for Class XI and/or Class X.');return;}
     try{
-      await db.collection('users').doc(uid).set({role,assignedSubjects:subs,assignedXI:xiS,assignedMP:mpS,approvedBy:(currentUser&&(currentUser.email||currentUser.uid))||'',approvedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+      await db.collection('users').doc(uid).set({role,assignedSubjects:subs,assignedXI:xiS,assignedMP:mpS,medium:medS,approvedBy:(currentUser&&(currentUser.email||currentUser.uid))||'',approvedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
       btn.textContent='Saved ✔'; setTimeout(()=>{btn.textContent='Save'},1500);
     }catch(e){alert('Save failed: '+e.message);}
   };
@@ -3347,11 +3378,12 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
   /* dashboard: share registration link */
   (function(){
     const sel=$('shReg'), inp=$('shLink'); if(!sel||!inp) return;
-    const mk=()=>{const b=location.origin+location.pathname; return sel.value?b+'?m='+sel.value:b;};
+    const msel=$('shMed');
+    const mk=()=>{const b=location.origin+location.pathname; const q=[]; if(sel.value) q.push('m='+sel.value); if(msel&&msel.value) q.push('med='+msel.value); return q.length?b+'?'+q.join('&'):b;};
     const head=()=>sel.value==='xi'?'Class XI':(sel.value==='mp'?'Class X (মাধ্যমিক)':'Class XI ও Class X');
-    const msg=()=>'নমস্কার স্যার/ম্যাডাম,\n\nTFHS-এ '+head()+'-এর নম্বর অনলাইনে এন্ট্রি করার জন্য নিচের লিঙ্কে নিজের অ্যাকাউন্ট খুলুন।\n\nলিঙ্ক: '+mk()+'\n\nসহজ নিয়ম:\n১. লিঙ্ক খুলে "Register (New Teacher)" চাপুন।\n২. নাম, ইমেইল, পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর) দিন।\n৩. Class XI / Class X-এর নিজের বিষয় বেছে "Submit for Approval" চাপুন।\n৪. প্রধান শিক্ষক অনুমোদন দিলে আবার লিঙ্ক খুলে Sign In করুন।\n৫. Attendance Lock হলে নম্বর এন্ট্রি করুন → Save Draft → Finalize & Lock।\n\nধন্যবাদ।';
+    const msg=()=>'নমস্কার স্যার/ম্যাডাম,\n\nTFHS-এ '+head()+'-এর নম্বর অনলাইনে এন্ট্রি করার জন্য নিচের লিঙ্কে নিজের অ্যাকাউন্ট খুলুন।\n\nলিঙ্ক: '+mk()+'\n\nসহজ নিয়ম:\n১. লিঙ্ক খুলে "Register (New Teacher)" চাপুন।\n২. নাম, ইমেইল, পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর) দিন।\n৩. নিজের মাধ্যম (Bengali / Santali / দুটোই) বেছে Class XI / Class X-এর নিজের বিষয় বেছে "Submit for Approval" চাপুন।\n৪. প্রধান শিক্ষক অনুমোদন দিলে আবার লিঙ্ক খুলে Sign In করুন।\n৫. Attendance Lock হলে নম্বর এন্ট্রি করুন → Save Draft → Finalize & Lock।\n\nধন্যবাদ।';
     const upd=()=>{inp.value=mk();};
-    sel.onchange=upd; upd();
+    sel.onchange=upd; if(msel) msel.onchange=upd; upd();
     $('shCopy').onclick=async()=>{ try{await navigator.clipboard.writeText(mk());$('shCopy').textContent='Copied ✔';setTimeout(()=>$('shCopy').textContent='Copy Link',1500);}catch(e){prompt('Copy link:',mk());} };
     $('shWa').onclick=()=>window.open('https://wa.me/?text='+encodeURIComponent(msg()),'_blank');
   })();
