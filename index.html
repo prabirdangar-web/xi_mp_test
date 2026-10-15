@@ -221,6 +221,38 @@ body.marks-only .content{padding:14px}
 .ml-panel{margin-top:16px;border-top:1px dashed #cbd5e1;padding-top:12px}
 .ml-panel table td{vertical-align:middle}
 .ml-panel input.ml-url{width:100%;min-width:260px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px}
+
+/* ---- Staff Approvals: one card per staff ---- */
+.stlist{display:flex;flex-direction:column;gap:26px;margin-top:16px}
+.stcard{background:#fff;border:1px solid #cbd5e1;border-left:8px solid #94a3b8;border-radius:14px;box-shadow:0 4px 14px rgba(15,23,42,.10);overflow:hidden}
+.stcard.r-pending{border-left-color:#f59e0b}
+.stcard.r-teacher,.stcard.r-staff{border-left-color:#16a34a}
+.stcard.r-invigilator{border-left-color:#2563eb}
+.stcard.r-rejected{border-left-color:#dc2626}
+.stcard.r-admin{border-left-color:#7c3aed}
+.sthead{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;background:#f1f5f9;padding:14px 18px;border-bottom:1px solid #e2e8f0}
+.stwho{display:flex;gap:12px;align-items:center}
+.stnum{background:#0f172a;color:#fff;border-radius:999px;min-width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
+.stwho b{font-size:16px;display:block}
+.stwho small{color:#475569;font-size:12px;word-break:break-all}
+.stmeta{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:12px;color:#475569}
+.stmeta select{padding:7px 10px;border-radius:8px;border:1px solid #94a3b8;font-weight:700;width:auto}
+.strq{background:#fff;border:1px dashed #94a3b8;border-radius:8px;padding:5px 10px;line-height:1.5}
+.stbody{display:grid;grid-template-columns:200px 1fr 1fr;gap:14px;padding:16px 18px}
+.stbox{border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;background:#fafcff}
+.stbox h4{margin:0 0 8px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:#1e3a8a;border-bottom:2px solid #dbeafe;padding-bottom:5px}
+.stbox.stmed{background:#f0fdf4}
+.stbox.stmed h4{color:#166534;border-bottom-color:#bbf7d0}
+.stchips{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px}
+.stmed .stchips{grid-template-columns:1fr}
+.stchip{display:flex;align-items:center;gap:8px;margin:0;padding:6px 9px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;font-size:12px;font-weight:600;cursor:pointer;line-height:1.3}
+.stchip:hover{border-color:#2563eb;background:#eff6ff}
+.stchip input{width:16px;height:16px;min-width:0;margin:0;flex:0 0 auto;accent-color:#2563eb}
+.stchip:has(input:checked){background:#dbeafe;border-color:#2563eb;color:#1e3a8a}
+.stchip.off{opacity:.35;pointer-events:none}
+.stfoot{display:flex;gap:10px;justify-content:flex-end;padding:12px 18px;border-top:1px solid #e2e8f0;background:#f8fafc}
+.stempty{padding:20px;color:#64748b}
+@media(max-width:900px){.stbody{grid-template-columns:1fr}}
 </style>
 </head>
 
@@ -279,6 +311,7 @@ body.marks-only .content{padding:14px}
   <input id="loginEmail" type="email" placeholder="Staff/Admin email">
   <input id="loginPassword" type="password" placeholder="Password">
   <button onclick="loginUser()">Sign In</button>
+  <button onclick="forgotPassword()" style="background:#f59e0b;color:#111">Forgot Password?</button>
   <button onclick="logoutUser()">Sign Out</button>
   <button id="regBtn" onclick="toggleRegister()" style="background:#16a34a;color:#fff">Register (New Teacher)</button>
   <span class="role-badge" id="roleBadge">VIEWER</span>
@@ -709,8 +742,7 @@ body.marks-only .content{padding:14px}
   <div class="subtitle">Admin only — approve self-registered teachers and tick the subjects they may enter marks for.</div>
   <div class="panel">
     <div class="toolbar"><button class="btn" onclick="loadStaff()">Refresh</button><span id="staffMsg" style="font-size:13px"></span></div>
-    <div class="tablewrap"><table><thead><tr><th>Name / Email</th><th>Requested</th><th>Role</th><th>Subjects</th><th>Action</th></tr></thead>
-    <tbody id="staffBody"><tr><td colspan="5">Click Refresh.</td></tr></tbody></table></div>
+    <div id="staffBody" class="stlist"><div class="stempty">Click Refresh.</div></div>
   </div>
 </section>
 
@@ -1030,6 +1062,19 @@ function requireAssignedClass(cls,value,label){
   return true;
 }
 
+/* Subject dropdowns are grouped medium-wise: Bengali medium (BNGA) / Santali medium (SANT) / Common subjects */
+function groupMedOptions(el){
+  if(!el.querySelector('optgroup')){
+    const opts=[...el.options].filter(o=>o.value); if(!opts.length) return;
+    const cur=el.value, g={BN:[],SA:[],CM:[]};
+    opts.forEach(o=>{const v=o.value.toUpperCase(); (v==='BNGA'?g.BN:v==='SANT'?g.SA:g.CM).push(o);});
+    [['BN','🟢 Bengali medium'],['SA','🟠 Santali medium'],['CM','📘 Common subjects (both mediums)']].forEach(([k,label])=>{
+      if(!g[k].length) return; const og=document.createElement('optgroup'); og.label=label; g[k].forEach(o=>og.appendChild(o)); el.appendChild(og);
+    });
+    el.value=cur;
+  }
+  el.querySelectorAll('optgroup').forEach(og=>{ og.hidden=![...og.children].some(o=>!o.disabled); });
+}
 /* Teachers see and can use ONLY their assigned subjects (admin sees all). */
 function restrictSubjectSelects(fire){
   const rules=[['attSubject','xi'],['marksSubject','xi'],['combSubject','xi'],['mp_attSubject','mp'],['mp_marksSubject','mp'],['mp_resultSubject','mp']];
@@ -1041,6 +1086,7 @@ function restrictSubjectSelects(fire){
       const ls=window.__linkSel&&window.__linkSel[id]; if(ls&&!ls.has(String(o.value).toUpperCase())) ok=false;
       o.hidden=!ok; o.disabled=!ok;
     });
+    groupMedOptions(el);
     const cur=el.selectedOptions[0];
     if(cur&&cur.value&&cur.disabled){
       const first=[...el.options].find(o=>o.value&&!o.disabled);
@@ -1101,6 +1147,12 @@ async function loginUser(){
   if(!email||!password){alert("Enter your existing staff/admin email and password.");return;}
   try{ await auth.signInWithEmailAndPassword(email,password); }
   catch(e){ alert("Sign in failed: "+e.message); }
+}
+async function forgotPassword(){
+  const email=document.getElementById("loginEmail").value.trim();
+  if(!email){alert("Type your registered email in the Login email box first, then press Forgot Password.");return;}
+  try{ await auth.sendPasswordResetEmail(email); alert("Password reset link sent to "+email+". Open that email (check Spam too), set a new password, then Sign In."); }
+  catch(e){ alert(e.code==="auth/user-not-found"?"This email is not registered.":"Could not send reset email: "+e.message); }
 }
 async function logoutUser(){ try{ await auth.signOut(); await auth.signInAnonymously(); }catch(e){ alert(e.message); } }
 
@@ -3305,6 +3357,18 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
     const m=$('roleMessage');
     if(m&&roleIs('pending')) m.textContent='Registered — waiting for Headmaster approval. You cannot enter marks yet.';
     if(m&&roleIs('rejected')) m.textContent='Registration not approved. Contact the Headmaster.';
+    if(m&&roleIs('staff','teacher')){
+      const p=currentUserProfile||{}, md=listValue(p.medium).map(x=>String(x).toUpperCase());
+      if(('assignedXI' in p)||('assignedMP' in p)){
+        const xi=listValue(p.assignedXI).map(x=>x.toUpperCase()), mp=listValue(p.assignedMP).map(x=>x.toUpperCase());
+        const grp=(f)=>{const a=xi.filter(f),b=mp.filter(f),t=[]; if(a.length)t.push('XI: '+a.join(', ')); if(b.length)t.push('X: '+b.join(', ')); return t.join(' · ');};
+        const parts=[];
+        if(md.includes('BENGALI')){const t=grp(c=>c==='BNGA'); if(t)parts.push('🟢 Bengali medium → '+t);}
+        if(md.includes('SANTALI')){const t=grp(c=>c==='SANT'); if(t)parts.push('🟠 Santali medium → '+t);}
+        const cm=grp(c=>c!=='BNGA'&&c!=='SANT'); if(cm)parts.push('📘 Common → '+cm);
+        if(parts.length) m.textContent='Your subjects — '+parts.join('   |   ');
+      }
+    }
     const ns=$('navStaff'); if(ns) ns.style.display=isAdmin()?'block':'none';
     const sr=$('shareRegPanel'); if(sr) sr.style.display=isAdmin()?'block':'none';
     const rb=$('regBtn'); if(rb) rb.style.display=(currentUser&&!currentUser.isAnonymous&&currentRole!=='viewer')?'none':'inline-block';
@@ -3326,7 +3390,7 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
   }
   window.loadStaff=async function(){
     const body=$('staffBody'), msg=$('staffMsg');
-    if(!isAdmin()){body.innerHTML='<tr><td colspan="5">Admin only.</td></tr>';return;}
+    if(!isAdmin()){body.innerHTML='<div class="stempty">Admin only.</div>';return;}
     msg.textContent='Loading…';
     try{
       const snap=await db.collection('users').get();
@@ -3334,36 +3398,58 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
       const list=snap.docs.map(d=>({uid:d.id,...d.data()}));
       const rank=r=>r==='pending'?0:(r==='admin'?9:1);
       list.sort((a,b)=>rank(a.role)-rank(b.role)||String(a.name||a.email||'').localeCompare(String(b.name||b.email||'')));
+      const ROLES=['pending','teacher','staff','invigilator','rejected'];
+      const chip=(cl,c,t,on)=>'<label class="stchip"><input type="checkbox" class="'+cl+'" value="'+esc(c)+'"'+(on?' checked':'')+'><span>'+esc(t)+'</span></label>';
+      const medTag=c=>c==='BNGA'?' (Bengali medium)':c==='SANT'?' (Santali medium)':'';
+      let n=0;
       body.innerHTML=list.map(u=>{
+        n++;
         const role=String(u.role||'viewer').toLowerCase();
         const up=v=>listValue(v).map(x=>x.toUpperCase());
         const classWise=('assignedXI' in u)||('assignedMP' in u);
         let preXI=classWise?up(u.assignedXI):up(u.assignedSubjects), preMP=classWise?up(u.assignedMP):up(u.assignedSubjects);
-        if(role==='pending'&&u.requestedSubject){
-          const toks=String(u.requestedSubject).split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
+        const toks=String(u.requestedSubject||'').split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
+        if(role==='pending'&&toks.length){
           preXI=toks.filter(t=>t.startsWith('XI:')).map(t=>t.slice(3)); preMP=toks.filter(t=>t.startsWith('MP:')).map(t=>t.slice(3));
           const plain=toks.filter(t=>!t.includes(':')); preXI=preXI.concat(plain); preMP=preMP.concat(plain);
         }
-        if(role==='admin') return '<tr><td><b>'+esc(u.name||'')+'</b><br><small>'+esc(u.email||u.uid)+'</small></td><td>—</td><td><b>ADMIN</b></td><td>All</td><td>—</td></tr>';
-        const roleSel='<select class="st-role">'+['pending','teacher','staff','invigilator','rejected'].map(r=>'<option value="'+r+'"'+(r===role?' selected':'')+'>'+r+'</option>').join('')+(['pending','teacher','staff','invigilator','rejected'].includes(role)?'':'<option value="'+esc(role)+'" selected>'+esc(role)+'</option>')+'</select>';
-        const lab=(cl,c,t,on)=>'<label style="display:inline-block;margin:2px 8px 2px 0;font-size:12px"><input type="checkbox" class="'+cl+'" value="'+esc(c)+'"'+(on?' checked':'')+'> '+esc(t)+'</label>';
+        const head=(extra)=>'<div class="sthead"><div class="stwho"><span class="stnum">'+n+'</span><div><b>'+esc(u.name||'(no name)')+'</b><small>'+esc(u.email||u.uid)+'</small></div></div>'+extra+'</div>';
+        if(role==='admin') return '<div class="stcard r-admin">'+head('<div class="stmeta"><b style="color:#7c3aed">ADMIN — all subjects, all mediums</b></div>')+'</div>';
+        const reqXI=toks.filter(t=>t.startsWith('XI:')).map(t=>t.slice(3)), reqMP=toks.filter(t=>t.startsWith('MP:')).map(t=>t.slice(3));
+        const rq=(toks.length||u.requestedMedium)?'<div class="strq"><b>Requested</b><br>'+(u.requestedMedium?'Medium: '+esc(u.requestedMedium)+'<br>':'')+(reqXI.length?'XI: '+esc(reqXI.join(', '))+'<br>':'')+(reqMP.length?'X: '+esc(reqMP.join(', ')):'')+'</div>':'';
+        const roleSel='<label>Role&nbsp;<select class="st-role">'+ROLES.map(r=>'<option value="'+r+'"'+(r===role?' selected':'')+'>'+r+'</option>').join('')+(ROLES.includes(role)?'':'<option value="'+esc(role)+'" selected>'+esc(role)+'</option>')+'</select></label>';
         const reqMed=String(u.requestedMedium||'').split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
         const curMed=('medium' in u&&listValue(u.medium).length)?up(u.medium):reqMed;
-        const medBoxes='<div style="margin-bottom:6px"><b>Medium</b><br>'+[['BENGALI','Bengali'],['SANTALI','Santali']].map(m=>lab('st-med',m[0],m[1],curMed.includes(m[0]))).join('')+'</div>';
-        const boxes=medBoxes+'<div><b>Class XI</b><br>'+xiCodes.map(c=>lab('st-xi',c,c+(XI_NAMES[c]?' - '+XI_NAMES[c]:''),preXI.includes(c))).join('')+'</div><div style="margin-top:6px"><b>Class X</b><br>'+mpCodes.map(c=>lab('st-mp',c,MP_NAMES[c]||c,preMP.includes(c))).join('')+'</div>';
-        return '<tr data-uid="'+esc(u.uid)+'"><td><b>'+esc(u.name||'(no name)')+'</b><br><small>'+esc(u.email||u.uid)+'</small></td><td>'+esc(u.requestedSubject||'—')+(u.requestedMedium?'<br><small><b>Medium:</b> '+esc(u.requestedMedium)+'</small>':'')+'</td><td>'+roleSel+'</td><td style="min-width:220px">'+boxes+'</td><td><button class="btn success" onclick="saveStaff(this)">Save</button></td></tr>';
-      }).join('')||'<tr><td colspan="5">No users.</td></tr>';
+        const medBox='<div class="stbox stmed"><h4>Medium</h4><div class="stchips">'+[['BENGALI','🟢 Bengali medium'],['SANTALI','🟠 Santali medium']].map(m=>chip('st-med',m[0],m[1],curMed.includes(m[0]))).join('')+'</div></div>';
+        const xiBox='<div class="stbox"><h4>Class XI subjects</h4><div class="stchips">'+xiCodes.map(c=>chip('st-xi',c,c+(XI_NAMES[c]?' - '+XI_NAMES[c]:'')+medTag(c),preXI.includes(c))).join('')+'</div></div>';
+        const mpBox='<div class="stbox"><h4>Class X subjects</h4><div class="stchips">'+mpCodes.map(c=>chip('st-mp',c,(MP_NAMES[c]||c)+medTag(c),preMP.includes(c))).join('')+'</div></div>';
+        const foot='<div class="stfoot"><button class="btn light" onclick="resetStaffPw(this)">🔑 Reset Password</button><button class="btn success" onclick="saveStaff(this)">💾 Save</button></div>';
+        return '<div class="stcard r-'+esc(role)+'" data-uid="'+esc(u.uid)+'" data-email="'+esc(u.email||'')+'">'+head('<div class="stmeta">'+rq+roleSel+'</div>')+'<div class="stbody">'+medBox+xiBox+mpBox+'</div>'+foot+'</div>';
+      }).join('')||'<div class="stempty">No users.</div>';
+      applyStaffMedium();
       msg.textContent=list.filter(u=>String(u.role).toLowerCase()==='pending').length+' pending';
     }catch(e){msg.textContent='Could not load: '+e.message;}
   };
+  /* grey-out BNGA / SANT chips whose medium is not ticked */
+  function applyStaffMedium(card){
+    (card?[card]:[...document.querySelectorAll('#staffBody .stcard[data-uid]')]).forEach(c=>{
+      const on=new Set([...c.querySelectorAll('.st-med:checked')].map(x=>x.value));
+      c.querySelectorAll('.st-xi,.st-mp').forEach(i=>{
+        const m=LANG2MED[i.value]; if(!m) return;
+        const ok=on.has(m); if(!ok) i.checked=false; i.disabled=!ok;
+        const lab=i.closest('label'); if(lab) lab.classList.toggle('off',!ok);
+      });
+    });
+  }
+  document.addEventListener('change',e=>{ if(e.target&&e.target.classList&&e.target.classList.contains('st-med')) applyStaffMedium(e.target.closest('.stcard')); });
   window.saveStaff=async function(btn){
     if(!requireAdmin())return;
-    const tr=btn.closest('tr'), uid=tr.dataset.uid;
-    const role=tr.querySelector('.st-role').value;
+    const card=btn.closest('.stcard'), uid=card.dataset.uid;
+    const role=card.querySelector('.st-role').value;
     const isT=(role==='teacher'||role==='staff');
-    const xiS=isT?[...tr.querySelectorAll('.st-xi:checked')].map(x=>x.value):[];
-    const mpS=isT?[...tr.querySelectorAll('.st-mp:checked')].map(x=>x.value):[];
-    const medS=isT?[...tr.querySelectorAll('.st-med:checked')].map(x=>x.value):[];
+    const xiS=isT?[...card.querySelectorAll('.st-xi:checked')].map(x=>x.value):[];
+    const mpS=isT?[...card.querySelectorAll('.st-mp:checked')].map(x=>x.value):[];
+    const medS=isT?[...card.querySelectorAll('.st-med:checked')].map(x=>x.value):[];
     if(isT&&!medS.length){alert('Tick the medium (Bengali and/or Santali) for this teacher.');return;}
     const badLang=c=>(c==='BNGA'&&!medS.includes('BENGALI'))||(c==='SANT'&&!medS.includes('SANTALI'));
     if(isT){ for(let i=xiS.length-1;i>=0;i--) if(badLang(xiS[i])) xiS.splice(i,1); for(let i=mpS.length-1;i>=0;i--) if(badLang(mpS[i])) mpS.splice(i,1); }
@@ -3371,8 +3457,18 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
     if(isT&&!subs.length){alert('Tick at least one subject for Class XI and/or Class X.');return;}
     try{
       await db.collection('users').doc(uid).set({role,assignedSubjects:subs,assignedXI:xiS,assignedMP:mpS,medium:medS,approvedBy:(currentUser&&(currentUser.email||currentUser.uid))||'',approvedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-      btn.textContent='Saved ✔'; setTimeout(()=>{btn.textContent='Save'},1500);
+      card.className='stcard r-'+role;
+      btn.textContent='Saved ✔'; setTimeout(()=>{btn.textContent='💾 Save'},1500);
     }catch(e){alert('Save failed: '+e.message);}
+  };
+  /* admin: forgotten password -> send reset link to the teacher's email */
+  window.resetStaffPw=async function(btn){
+    if(!requireAdmin())return;
+    const card=btn.closest('.stcard'), email=(card.dataset.email||'').trim();
+    if(email.indexOf('@')<1){alert('This account has no valid email saved.');return;}
+    if(!confirm('Send a password-reset link to\n'+email+'\n\nThe teacher opens the mail, sets a new password, then signs in again.'))return;
+    try{ await auth.sendPasswordResetEmail(email); btn.textContent='Mail sent ✔'; setTimeout(()=>{btn.textContent='🔑 Reset Password'},2500); }
+    catch(e){ alert('Reset failed: '+e.message); }
   };
 
   /* dashboard: share registration link */
