@@ -1064,15 +1064,22 @@ function requireAssignedClass(cls,value,label){
 
 /* Subject dropdowns are grouped medium-wise: Bengali medium (BNGA) / Santali medium (SANT) / Common subjects */
 function groupMedOptions(el){
-  if(!el.querySelector('optgroup')){
-    const opts=[...el.options].filter(o=>o.value); if(!opts.length) return;
-    const cur=el.value, g={BN:[],SA:[],CM:[]};
+  const opts=[...el.options].filter(o=>o.value); if(!opts.length) return;
+  const cur=el.value;
+  const md=(!isAdmin()&&currentUserProfile)?listValue(currentUserProfile.medium).map(x=>String(x).toUpperCase()):[];
+  const MEDLBL={BENGALI:'🟢 Bengali medium',SANTALI:'🟠 Santali medium'};
+  el.querySelectorAll('optgroup').forEach(og=>og.remove());
+  const groups=[];
+  if(md.length===1&&MEDLBL[md[0]]){
+    /* single-medium teacher: everything (language + common subjects) sits under that one medium */
+    groups.push([MEDLBL[md[0]],opts]);
+  }else{
+    const g={BN:[],SA:[],CM:[]};
     opts.forEach(o=>{const v=o.value.toUpperCase(); (v==='BNGA'?g.BN:v==='SANT'?g.SA:g.CM).push(o);});
-    [['BN','🟢 Bengali medium'],['SA','🟠 Santali medium'],['CM','📘 Common subjects (both mediums)']].forEach(([k,label])=>{
-      if(!g[k].length) return; const og=document.createElement('optgroup'); og.label=label; g[k].forEach(o=>og.appendChild(o)); el.appendChild(og);
-    });
-    el.value=cur;
+    groups.push([MEDLBL.BENGALI,g.BN],[MEDLBL.SANTALI,g.SA],['📘 Common subjects (both mediums)',g.CM]);
   }
+  groups.forEach(([label,arr])=>{ if(!arr.length) return; const og=document.createElement('optgroup'); og.label=label; arr.forEach(o=>og.appendChild(o)); el.appendChild(og); });
+  el.value=cur;
   el.querySelectorAll('optgroup').forEach(og=>{ og.hidden=![...og.children].some(o=>!o.disabled); });
 }
 /* Teachers see and can use ONLY their assigned subjects (admin sees all). */
@@ -3365,7 +3372,9 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
         const parts=[];
         if(md.includes('BENGALI')){const t=grp(c=>c==='BNGA'); if(t)parts.push('🟢 Bengali medium → '+t);}
         if(md.includes('SANTALI')){const t=grp(c=>c==='SANT'); if(t)parts.push('🟠 Santali medium → '+t);}
-        const cm=grp(c=>c!=='BNGA'&&c!=='SANT'); if(cm)parts.push('📘 Common → '+cm);
+        const cm=grp(c=>c!=='BNGA'&&c!=='SANT');
+        if(md.length===1){ const all=grp(()=>true); parts.length=0; if(all)parts.push((md[0]==='SANTALI'?'🟠 Santali medium → ':'🟢 Bengali medium → ')+all); }
+        else if(cm)parts.push('📘 Common → '+cm);
         if(parts.length) m.textContent='Your subjects — '+parts.join('   |   ');
       }
     }
