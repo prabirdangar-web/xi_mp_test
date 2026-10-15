@@ -331,7 +331,7 @@ body.marks-only .content{padding:14px}
   <div id="regGuide" style="flex-basis:100%;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.7;color:#e2e8f0">
     <b>রেজিস্ট্রেশনের সহজ নিয়ম</b><br>
     ১. পুরো নাম, ইমেইল ও পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর) দিন, পাসওয়ার্ড আবার লিখুন।<br>
-    ২. আগে মাধ্যম (Bengali / Santali / দুটোই) বেছে নিন। তারপর Class XI ও/অথবা Class X-এর তালিকায় আপনি যে যে বিষয় পড়ান সবগুলোতে টিক দিন (একাধিক বিষয় হলে একসাথে একাধিক টিক)। Bengali মাধ্যম বেছে নিলে BNGA, Santali মাধ্যম বেছে নিলে SANT দেখাবে।<br>
+    ২. আগে মাধ্যম (Bengali / Santali / দুটোই) বেছে নিন। তারপর Class XI ও/অথবা Class X-এর তালিকায় আপনি যে যে বিষয় পড়ান সবগুলোতে টিক দিন। SANT/SANTHALI বিষয় নেওয়া ছাত্রছাত্রীকে Santali-medium হিসেবে ধরা হবে; Bengali ও Santali ভাষার নম্বর আলাদা subject sheet-এ এন্ট্রি হবে।<br>
     ৩. "Submit for Approval" চাপুন। "Waiting for Headmaster approval" লেখা এলে আবেদন গেছে।<br>
     ৪. প্রধান শিক্ষক অনুমোদন দিলে একই লিঙ্ক আবার খুলে Sign In করুন (একই ইমেইল-পাসওয়ার্ড)।<br>
     ৫. Attendance Lock হওয়ার পর নম্বর এন্ট্রি করুন → Save Draft → শেষে Finalize &amp; Lock।
@@ -679,6 +679,8 @@ body.marks-only .content{padding:14px}
           <option value="SEM2">Semester II</option>
           <option value="COMB">Combined (Sem I + Sem II + Project/Practical)</option>
         </select></div>
+      <div class="field"><label>Medium</label>
+        <select id="xtMedium" onchange="renderXiTab()"><option value="ALL">All Mediums</option><option value="BENGALI">Bengali Medium</option><option value="SANTALI">Santali Medium (SANT subject)</option></select></div>
       <div class="field"><label>Sex</label>
         <select id="xtSex" onchange="renderXiTab()"><option value="ALL">All</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
       <div class="field"><label>Order</label>
@@ -910,6 +912,7 @@ body.marks-only .content{padding:14px}
   <div class="subtitle">All subjects — Written 90 + IFE 10 = 100 each. Uses locked marks sheets only.</div>
   <div class="panel">
     <div class="toolbar">
+      <div class="field"><label>Medium</label><select id="mp_tabMedium" onchange="MP.renderTabulation()"><option value="ALL">All Mediums</option><option value="BNGA">Bengali Medium</option><option value="SANT">Santali Medium (SANT)</option></select></div>
       <div class="field"><label>Section</label><select id="mp_tabSec" onchange="MP.renderTabulation()"><option>ALL</option></select></div>
       <div class="field"><label>Sex</label><select id="mp_tabSex" onchange="MP.renderTabulation()"><option>ALL</option><option>Male</option><option>Female</option></select></div>
       <div class="field"><label>Order</label><select id="mp_tabSort" onchange="MP.renderTabulation()"><option value="rank">Rank-wise</option><option value="roll">Section / Roll-wise</option></select></div>
@@ -2356,10 +2359,12 @@ function xtSubLabels(){
 }
 function xtFiltered(){
   const q=(document.getElementById("xtSearch").value||"").toLowerCase().trim(),
-        sx=document.getElementById("xtSex").value, so=document.getElementById("xtSort").value;
+        sx=document.getElementById("xtSex").value, so=document.getElementById("xtSort").value,
+        med=(document.getElementById("xtMedium")||{}).value||"ALL";
   const rows=xtRows.filter(r=>{
-    const s=r.student;
-    return (sx==="ALL"||getStudentSex(s).toLowerCase()===sx.toLowerCase()) &&
+    const s=r.student, studentMed=studentTakesSubject(s,"SANT")?"SANTALI":"BENGALI";
+    return (med==="ALL"||studentMed===med) &&
+      (sx==="ALL"||getStudentSex(s).toLowerCase()===sx.toLowerCase()) &&
       (!q||String(getStudentReg(s)||"").toLowerCase().includes(q)||String(getStudentName(s)||"").toLowerCase().includes(q));
   });
   const rn=s=>Number(getStudentRoll(s))||0;
@@ -2406,20 +2411,22 @@ function printXiTab(){
   const t=document.getElementById("xtTable").cloneNode(true);
   const so=document.getElementById("xtSort").value==="rank"?"Rank-wise":"Roll-wise";
   const sx=document.getElementById("xtSex").value;
+  const med=(document.getElementById("xtMedium")||{}).value||"ALL";
   const note=xtPending.length?`<p style="text-align:center;color:#b91c1c;font-size:11px">PROVISIONAL — pending: ${[...new Set(xtPending)].map(escapeHtml).join(", ")}</p>`:"";
   const w=window.open("","_blank");
-  w.document.write(`<html><head><title>Class XI Tabulation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;padding:8px}h2,h3{text-align:center;margin:3px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #333;padding:3px 4px;font-size:9px;text-align:center}th{background:#eee}.badge{font-weight:700}</style></head><body><h2>TALDANGRA FULMATI HIGH SCHOOL [H.S.]</h2><h3>CLASS XI — ${XT_LABEL[xtModeUsed]} — TABULATION SHEET (${so})</h3><p style="text-align:center;font-size:11px">Sex: ${escapeHtml(sx)} | Th = Theory, Pr = Practical, Pj = Project, AB = Absent, · = subject not taken</p>${note}${t.outerHTML}</body></html>`);
+  w.document.write(`<html><head><title>Class XI Tabulation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;padding:8px}h2,h3{text-align:center;margin:3px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #333;padding:3px 4px;font-size:9px;text-align:center}th{background:#eee}.badge{font-weight:700}</style></head><body><h2>TALDANGRA FULMATI HIGH SCHOOL [H.S.]</h2><h3>CLASS XI — ${XT_LABEL[xtModeUsed]} — TABULATION SHEET (${so})</h3><p style="text-align:center;font-size:11px">Medium: ${escapeHtml(med)} | Sex: ${escapeHtml(sx)} | Th = Theory, Pr = Practical, Pj = Project, AB = Absent, · = subject not taken</p>${note}${t.outerHTML}</body></html>`);
   w.document.close(); w.print();
 }
 function exportXiTab(){
   if(!xtRows.length){ alert("Generate the tabulation sheet first."); return; }
   const rows=xtFiltered(), labels=xtSubLabels();
-  const hdr=["SL","Rank","Registration No.","Name","Sex"];
+  const med=(document.getElementById("xtMedium")||{}).value||"ALL";
+  const hdr=["SL","Rank","Registration No.","Name","Sex","Medium"];
   xtCols.forEach((c,i)=>{ const l=xtModeUsed==="SEM1"?["Total"]:xtModeUsed==="SEM2"?["Theory",SCHEMES[c].practical?"Practical":"Project","Total"]:["Sem I","Sem II",SCHEMES[c].practical?"Practical":"Project","Total"]; l.forEach(x=>hdr.push(c+" "+x)); });
   hdr.push("Grand Total","Full Marks","%","Result");
   const aoa=[hdr];
   rows.forEach((r,i)=>{
-    const s=r.student, line=[i+1,r.rank,getStudentReg(s),getStudentName(s),getStudentSex(s)];
+    const s=r.student, line=[i+1,r.rank,getStudentReg(s),getStudentName(s),getStudentSex(s),studentTakesSubject(s,"SANT")?"Santali":"Bengali"];
     r.cells.forEach((c,ci)=>{
       const n=xtModeUsed==="SEM1"?1:xtModeUsed==="SEM2"?3:4;
       if(c.state==="M") line.push(...(xtModeUsed==="SEM1"?[c.t]:[...c.parts,c.t]));
@@ -2662,8 +2669,23 @@ function nameOf(s){return val(s,["Name","Student Name","Candidate Name"])}
 function normSex(v){const t=normKey(v);if(!t)return"";if(["m","male","boy","boys","b"].includes(t))return"Male";if(["f","female","girl","girls","g"].includes(t))return"Female";return""}
 function sex(s){const r=val(s,["Sex","Gender"]);return normSex(r)||r}
 function keyOf(s){return normalize(reg(s)||roll(s)||nameOf(s))}
-/* 1st Language: Bengali (BNGA) or Santali (SANT) - a student takes only ONE of them. Blank = Bengali. */
-function firstLang(s){const v=normKey(val(s,["1st Language","First Language","1st Lang","Language","Medium","L1"]));return ["sant","santali","santhali"].includes(v)?"SANT":"BNGA"}
+/* Medium rule: a student with SANT/SANTALI recorded as a subject is Santali-medium.
+   Explicit Santali language/medium fields also count. Blank defaults to Bengali only when no SANT subject is recorded. */
+function firstLang(s){
+  const v=normKey(val(s,["1st Language","First Language","1st Lang","Language","Medium","L1"]));
+  if(["sant","santali","santhali"].includes(v)) return "SANT";
+  const keys=Object.keys(s||{});
+  const slotKeys=keys.filter(k=>/^s\d+$/i.test(normKey(k)));
+  if(slotKeys.some(k=>["SANT","SANTALI","SANTHALI"].includes(normalize(s[k]).toUpperCase().replace(/\s+/g,"")))) return "SANT";
+  const santKey=keys.find(k=>["sant","santali","santhali"].includes(normKey(k)));
+  if(santKey){
+    const flag=normKey(s[santKey]);
+    if(s[santKey]!=="" && !["n","no","0","false","-","nil","absent"].includes(flag)) return "SANT";
+  }
+  const subjectText=keys.filter(k=>/subject|sub\d|paper|language/i.test(k)).map(k=>normalize(s[k]).toUpperCase()).join("|");
+  if(/(^|[^A-Z])(SANT|SANTALI|SANTHALI)([^A-Z]|$)/.test(subjectText)) return "SANT";
+  return "BNGA";
+}
 function takesSubject(s,sub){return (sub==="BNGA"||sub==="SANT")?firstLang(s)===sub:true}
 function setLang(i,v){if(!requireAdmin()){renderStudents();return}students[i]["1st Language"]=(v==="SANT"?"SANT":"BNGA");renderStudents()}
 
@@ -3045,10 +3067,12 @@ async function generateTabulation(){
 function tabFiltered(){
   const q=normalize(document.getElementById("mp_tabSearch").value).toLowerCase(),
         sx=document.getElementById("mp_tabSex").value,sc=document.getElementById("mp_tabSec").value,
+        med=(document.getElementById("mp_tabMedium")||{}).value||"ALL",
         so=document.getElementById("mp_tabSort").value;
   const rows=tabRows.filter(r=>{
     const s=r.student;
-    return (sx==="ALL"||sex(s).toLowerCase()===sx.toLowerCase())&&(sc==="ALL"||String(sec(s))===sc)&&
+    return (med==="ALL"||firstLang(s)===med) &&
+      (sx==="ALL"||sex(s).toLowerCase()===sx.toLowerCase())&&(sc==="ALL"||String(sec(s))===sc)&&
       (!q||keyOf(s).toLowerCase().includes(q)||nameOf(s).toLowerCase().includes(q));
   });
   const rn=s=>Number(roll(s))||0;
@@ -3085,21 +3109,22 @@ function printTabulation(){
   if(!tabRows.length)return alert("Generate the tabulation sheet first.");
   const t=document.getElementById("mp_tabTable").cloneNode(true);
   const so=document.getElementById("mp_tabSort").value==="rank"?"Rank-wise":"Roll-wise";
-  const sx=document.getElementById("mp_tabSex").value,sc=document.getElementById("mp_tabSec").value;
+  const sx=document.getElementById("mp_tabSex").value,sc=document.getElementById("mp_tabSec").value,
+        med=(document.getElementById("mp_tabMedium")||{}).value||"ALL";
   const note=tabPending.length?`<p style="text-align:center;color:#b91c1c;font-size:11px">PROVISIONAL — pending: ${tabPending.map(c=>escapeHtml(PROGRAMME[c].name)).join(", ")}</p>`:"";
   const w=window.open("","_blank");
-  w.document.write(`<html><head><title>MP (SE) 2027 — Tabulation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;padding:8px}h2,h3{text-align:center;margin:3px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #333;padding:3px 4px;font-size:9px;text-align:center}td:nth-child(6){text-align:left;white-space:nowrap}th{background:#eee}.badge{font-weight:700}</style></head><body><h2>TALDANGRA FULMATI HIGH SCHOOL [H.S.]</h2><h3>MP (SE) 2027 SELECTION TEST — TABULATION SHEET (${so})</h3><p style="text-align:center;font-size:11px">Class X | Section: ${escapeHtml(sc)} | Sex: ${escapeHtml(sx)} | Full Marks per subject: 100 | Pass Mark: ${PASS_MARK}</p>${note}${t.outerHTML}</body></html>`);
+  w.document.write(`<html><head><title>MP (SE) 2027 — Tabulation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;padding:8px}h2,h3{text-align:center;margin:3px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #333;padding:3px 4px;font-size:9px;text-align:center}td:nth-child(6){text-align:left;white-space:nowrap}th{background:#eee}.badge{font-weight:700}</style></head><body><h2>TALDANGRA FULMATI HIGH SCHOOL [H.S.]</h2><h3>MP (SE) 2027 SELECTION TEST — TABULATION SHEET (${so})</h3><p style="text-align:center;font-size:11px">Class X | Medium: ${escapeHtml(med)} | Section: ${escapeHtml(sc)} | Sex: ${escapeHtml(sx)} | Full Marks per subject: 100 | Pass Mark: ${PASS_MARK}</p>${note}${t.outerHTML}</body></html>`);
   w.document.close();w.print();
 }
 function exportTabulation(){
   if(!tabRows.length)return alert("Generate the tabulation sheet first.");
   const rows=tabFiltered();
-  const hdr=["SL","Rank","B.S. Portal ID","Sec","Roll","Name","Sex"];
+  const hdr=["SL","Rank","B.S. Portal ID","Sec","Roll","Name","Sex","Medium"];
   tabCols.forEach(c=>hdr.push(c.name+" W/90",c.name+" IFE/10",c.name+" Total"));
   hdr.push("Grand Total","Full Marks","%","Result");
   const aoa=[hdr];
   rows.forEach((r,i)=>{
-    const s=r.student,line=[i+1,r.rank,reg(s),sec(s),roll(s),nameOf(s),sex(s)];
+    const s=r.student,line=[i+1,r.rank,reg(s),sec(s),roll(s),nameOf(s),sex(s),firstLang(s)==="SANT"?"Santali":"Bengali"];
     r.cells.forEach(c=>{if(c.state==="M")line.push(c.w,c.f,c.t);else{const x=c.state==="A"?"AB":"";line.push(x,x,x)}});
     line.push(r.total,r.fm,Number(r.pct.toFixed(2)),r.result);aoa.push(line);
   });
