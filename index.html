@@ -1593,11 +1593,18 @@ function renderSubjectCounts(){
   const counts=subjectWiseCounts(allCodes);
   box.innerHTML=allCodes.map(code=>{
     const c=counts[code];
-    return c===null
-      ? `<span class="badge" style="background:#fee2e2;color:#991b1b;margin:3px">${code}: not found</span>`
-      : `<span class="badge" style="background:#e2e8f0;color:#172033;margin:3px">${code}: <b>${c}</b></span>`;
+    if(c===null){
+      return `<span class="badge" style="background:#fee2e2;color:#991b1b;margin:3px">${code}: not found</span>`;
+    }
+    const enrolled=students.filter(s=>studentTakesSubject(s,code));
+    const santali=enrolled.filter(s=>typeof firstLang==="function" && firstLang(s)==="SANT").length;
+    const bengali=enrolled.length-santali;
+    return `<span class="badge" title="Total ${c}; Bengali medium ${bengali}; Santali medium ${santali}" style="display:inline-flex;flex-direction:column;align-items:flex-start;line-height:1.5;background:#e2e8f0;color:#172033;margin:3px;padding:5px 9px;border-radius:12px">
+      <span><b>${code}: ${c}</b></span>
+      <span style="font-size:11px;font-weight:500;color:#334155">Bengali: ${bengali} | Santali: ${santali}</span>
+    </span>`;
   }).join(" ")+
-  `<p style="font-size:12px;color:#64748b;margin-top:10px">Columns imported: ${escapeHtml((importedHeaders||[]).join(", ")||"—")}</p>`;
+  `<p style="font-size:12px;color:#64748b;margin-top:10px">Medium-wise counts use the imported student medium/subject data. Columns imported: ${escapeHtml((importedHeaders||[]).join(", ")||"—")}</p>`;
 }
 // Returns true if OK to proceed, false (with an alert already shown) if we can't tell who takes this subject
 function checkSubjectColumn(subject){
