@@ -553,6 +553,15 @@ body.marks-only .content{padding:14px}
         <select id="marksSubject" onchange="loadMarks()"></select>
       </div>
 
+      <div class="field">
+        <label>Student Medium / List</label>
+        <select id="marksMediumFilter" onchange="renderMarks()">
+          <option value="BENGALI" selected>Bengali-medium list</option>
+          <option value="SANTALI">Santali-medium list (SANT subject)</option>
+          <option value="ALL">All students together</option>
+        </select>
+      </div>
+
       <div class="field" style="flex:1">
         <label>Search</label>
         <input id="marksSearch" placeholder="Student name / Registration No." oninput="renderMarks()">
@@ -1245,9 +1254,9 @@ function isSemI(){
 
 function xiMedNote(s){
   const n=document.getElementById("marksMedNote"); if(!n) return;
-  if(s==="SANT"){ n.style.display="block"; n.textContent="🟢 SANTALI MEDIUM — this sheet lists ONLY the students who have SANT (Santali) in their subject slots. Bengali (BNGA) has its own sheet and its own teacher."; }
-  else if(s==="BNGA"){ n.style.display="block"; n.textContent="BENGALI — this sheet lists only the students who have BNGA in their subject slots. Santali-medium students (SANT) are on the SANT sheet."; }
-  else n.style.display="none";
+  if(s==="SANT"){ n.style.display="block"; n.textContent="SANTALI SUBJECT — the subject enrollment list is limited to students who have SANT in their subject slots."; }
+  else if(s==="BNGA"){ n.style.display="block"; n.textContent="BENGALI SUBJECT — the subject enrollment list is limited to students who have BNGA in their subject slots."; }
+  else { n.style.display="block"; n.textContent="COMMON SUBJECT (e.g. POLS): use Student Medium / List to view Bengali-medium and Santali-medium students separately. The default view is Bengali-medium; choose Santali-medium list to enter marks for the Santali-medium students. Choose All students together only when needed."; }
 }
 function updateScheme(){
   const s=document.getElementById("marksSubject").value;
@@ -1820,6 +1829,7 @@ async function loadMarks(){
   const subject=document.getElementById("marksSubject").value; const exam=document.getElementById("marksExam").value;
   marksLocked=false;
   marksAttendanceStatus="none"; marksAbsentKeys=new Set();
+  xiMedNote(subject);
   if(!subject){ marksRows=[]; renderMarks(); updateScheme(); updateMarksLockUI(); return; }
   if(!students.length){ alert("Please import/load XI-REG students first."); return; }
   if(!checkSubjectColumn(subject)) return;
@@ -1889,9 +1899,13 @@ function renderMarks(){
     return;
   }
 
-  const rows=marksRows.filter(r=>
-    Object.values(r.student).join(" ").toLowerCase().includes(q)
-  );
+  const mediumFilter=(document.getElementById("marksMediumFilter")?.value||"BENGALI");
+  const rows=marksRows.filter(r=>{
+    const matchesSearch=Object.values(r.student).join(" ").toLowerCase().includes(q);
+    const isSantali=studentTakesSubject(r.student,"SANT");
+    const matchesMedium=mediumFilter==="ALL"||(mediumFilter==="SANTALI"?isSantali:!isSantali);
+    return matchesSearch&&matchesMedium;
+  });
 
   const semI=isSemI();
 
