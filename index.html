@@ -553,12 +553,11 @@ body.marks-only .content{padding:14px}
         <select id="marksSubject" onchange="loadMarks()"></select>
       </div>
 
-      <div class="field">
-        <label>Student Medium / List</label>
-        <select id="marksMediumFilter" onchange="renderMarks()">
+      <div class="field" id="marksMediumField">
+        <label>Student Medium / List (separate lock)</label>
+        <select id="marksMediumFilter" onchange="loadMarks()">
           <option value="BENGALI" selected>Bengali-medium list</option>
-          <option value="SANTALI">Santali-medium list (SANT subject)</option>
-          <option value="ALL">All students together</option>
+          <option value="SANTALI">Santali-medium list</option>
         </select>
       </div>
 
@@ -1252,11 +1251,44 @@ function isSemI(){
   return exam==="SEM1"||exam==="SUPP";
 }
 
+/* ---- medium-wise marks sheets: common subjects have one sheet + one lock per medium ---- */
+function isCommonXi(sub){ return !!sub && sub!=="BNGA" && sub!=="SANT"; }
+function stuMed(st){ return studentTakesSubject(st,"SANT")?"SANTALI":"BENGALI"; }
+function marksMed(sub){
+  if(!isCommonXi(sub)) return "";
+  const el=document.getElementById("marksMediumFilter");
+  return (el&&el.value==="SANTALI")?"SANTALI":"BENGALI";
+}
+/* Bengali sheet keeps the original doc id (backward compatible); Santali sheet gets a _SANT suffix */
+function marksDocId(exam,sub,med){ return med==="SANTALI"?`${exam}_${sub}_SANT`:`${exam}_${sub}`; }
+function medLabel(med){ return med==="SANTALI"?"Santali-medium":med==="BENGALI"?"Bengali-medium":""; }
+let marksLegacyExtra=[]; /* rows of the other medium found in an old combined sheet; preserved on save */
+/* Reads the sheet(s) for one subject/exam. Common subjects: merges Bengali + Santali sheets.
+   rows = all available rows; lockedRows = rows from LOCKED sheets only. */
+async function fetchMarksMerged(exam,sub){
+  const mainSnap=await db.collection("xiMarks").doc(`${exam}_${sub}`).get();
+  const main=mainSnap.exists?mainSnap.data():null;
+  if(!isCommonXi(sub)){
+    const rows=main?(main.rows||[]):[];
+    return {rows,lockedRows:(main&&main.locked)?rows:[],pending:(main&&main.locked)?[]:[""],exists:!!main};
+  }
+  const sSnap=await db.collection("xiMarks").doc(`${exam}_${sub}_SANT`).get();
+  const sant=sSnap.exists?sSnap.data():null;
+  const bnRows=main?(main.rows||[]).filter(r=>stuMed(r.student)==="BENGALI"):[];
+  const saRows=sant?(sant.rows||[]):[];
+  const have=new Set(saRows.map(r=>studentKey(r.student)));
+  const legacySa=main?(main.rows||[]).filter(r=>stuMed(r.student)==="SANTALI"&&!have.has(studentKey(r.student))):[];
+  const rows=bnRows.concat(saRows,legacySa);
+  const lockedRows=[].concat((main&&main.locked)?bnRows:[],(sant&&sant.locked)?saRows:[]);
+  const pending=[]; if(!(main&&main.locked)) pending.push("Bengali-medium"); if(!(sant&&sant.locked)) pending.push("Santali-medium");
+  return {rows,lockedRows,pending,exists:!!(main||sant)};
+}
 function xiMedNote(s){
   const n=document.getElementById("marksMedNote"); if(!n) return;
+  const mf=document.getElementById("marksMediumField"); if(mf) mf.style.display=isCommonXi(s)?"":"none";
   if(s==="SANT"){ n.style.display="block"; n.textContent="SANTALI SUBJECT — the subject enrollment list is limited to students who have SANT in their subject slots."; }
   else if(s==="BNGA"){ n.style.display="block"; n.textContent="BENGALI SUBJECT — the subject enrollment list is limited to students who have BNGA in their subject slots."; }
-  else { n.style.display="block"; n.textContent="COMMON SUBJECT (e.g. POLS): use Student Medium / List to view Bengali-medium and Santali-medium students separately. The default view is Bengali-medium; choose Santali-medium list to enter marks for the Santali-medium students. Choose All students together only when needed."; }
+  else { n.style.display="block"; n.textContent="COMMON SUBJECT (e.g. POLS): Bengali-medium and Santali-medium students have SEPARATE marks sheets and SEPARATE locks. Choose the medium list in Student Medium / List; saving, finalizing & locking, and Admin unlock apply only to the selected medium."; }
 }
 function updateScheme(){
   const s=document.getElementById("marksSubject").value;
@@ -1851,8 +1883,22 @@ async function loadMarks(){
     return;
   }
 
-  const eligible=students.filter(s=>studentTakesSubject(s,subject));
-  try{ const snap=await db.collection("xiMarks").doc(`${exam}_${subject}`).get(); if(snap.exists){marksLocked=!!snap.data().locked; marksOwnerUid=snap.data().ownerUid||snap.data().updatedBy||null; marksRows=(snap.data().rows||[]).map((r,i)=>({sl:i+1,student:r.student,theory:r.theory??"",component:r.component??""}));} else {marksOwnerUid=null; marksRows=eligible.map((s,i)=>({sl:i+1,student:s,theory:"",component:""}));} }catch(e){alert("Could not load marks: "+e.message);return;}
+  const med=marksMed(subject);
+  const eligible=students.filter(s=>studentTakesSubject(s,subject)&&(!med||stuMed(s)===med));
+  marksLegacyExtra=[]; marksOwnerUid=null;
+  try{
+    const snap=await db.collection("xiMarks").doc(marksDocId(exam,subject,med)).get();
+    let saved=[];
+    if(snap.exists){
+      marksLocked=!!snap.data().locked; marksOwnerUid=snap.data().ownerUid||snap.data().updatedBy||null; saved=snap.data().rows||[];
+      if(med==="BENGALI") marksLegacyExtra=saved.filter(r=>stuMed(r.student)==="SANTALI"); /* old combined sheet: keep other medium's rows untouched */
+    }else if(med==="SANTALI"){
+      /* no Santali sheet yet: seed from marks previously saved in the old combined sheet (still needs its own lock) */
+      const old=await db.collection("xiMarks").doc(`${exam}_${subject}`).get();
+      if(old.exists) saved=old.data().rows||[];
+    }
+    marksRows=eligible.map((s,i)=>{const k=studentKey(s); const o=saved.find(r=>studentKey(r.student)===k); return {sl:i+1,student:s,theory:o?(o.theory??""):"",component:o?(o.component??""):""};});
+  }catch(e){alert("Could not load marks: "+e.message);return;}
   renderMarks(); updateScheme(); updateMarksLockUI();
 }
 function updateMarksLockUI(){
@@ -1871,28 +1917,29 @@ function updateMarksLockUI(){
     msg.textContent="⛔ Attendance for this subject has been saved as a draft but is not yet Submitted & Locked — Marks entry stays disabled until it is finalized.";
   }else if(marksLocked){
     msg.className="lockbox";
-    msg.textContent="🔒 MARKS LOCKED — only Admin can unlock.";
+    msg.textContent="🔒 MARKS LOCKED"+(marksMed(subject)?" ("+medLabel(marksMed(subject))+" list)":"")+" — only Admin can unlock."+(marksMed(subject)?" The other medium list has its own separate lock.":"");
   }else{
     msg.className="lockbox ok";
-    msg.textContent="🔓 Attendance finalized — Marks entry OPEN. Students recorded ABSENT in the locked attendance are automatically locked out below.";
+    msg.textContent="🔓 Attendance finalized — Marks entry OPEN"+(marksMed(subject)?" ("+medLabel(marksMed(subject))+" list — separate lock)":"")+". Students recorded ABSENT in the locked attendance are automatically locked out below.";
   }
 }
 async function lockMarks(){
   if(!requireMarks()||marksLocked)return;
   if(marksAttendanceStatus!=="locked"){alert("Attendance is not yet finalized for this subject. Finalize Attendance before locking marks.");return;}
   if(!marksRows.length){alert("Load marks first.");return;}
-  if(!confirm("Finalize and LOCK these marks?"))return;
   const exam=document.getElementById("marksExam").value,subject=document.getElementById("marksSubject").value;
+  const med=marksMed(subject);
+  if(!confirm("Finalize and LOCK these marks"+(med?" for the "+medLabel(med)+" list only":"")+"?"))return;
   if(!requireAssignedClass("xi",subject,"subject")) return;
   if(!canEditUnlocked(marksOwnerUid)){alert("These marks are assigned to another staff member. Only Admin can finalize/change them.");return;}
-  try{await db.collection("xiMarks").doc(`${exam}_${subject}`).set({exam,subject,rows:marksRows.map(r=>{
+  try{await db.collection("xiMarks").doc(marksDocId(exam,subject,med)).set({exam,subject,medium:med||null,rows:marksRows.map(r=>{
       const absent=marksAbsentKeys.has(studentKey(r.student));
       return {student:r.student,theory:absent?"":r.theory,component:absent?"":r.component};
-    }),ownerUid:marksOwnerUid||currentUser?.uid||null,updatedBy:currentUser?.uid||null,locked:true,lockedBy:currentUser?.uid||null,lockedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});marksLocked=true;updateMarksLockUI();alert("Marks finalized and locked.");}catch(e){alert("Lock failed: "+e.message);}
+    }).concat(marksLegacyExtra),ownerUid:marksOwnerUid||currentUser?.uid||null,updatedBy:currentUser?.uid||null,locked:true,lockedBy:currentUser?.uid||null,lockedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});marksLocked=true;updateMarksLockUI();alert("Marks finalized and locked.");}catch(e){alert("Lock failed: "+e.message);}
 }
 async function unlockMarks(){
   if(!requireAdmin())return; const exam=document.getElementById("marksExam").value,subject=document.getElementById("marksSubject").value;if(!subject)return;
-  try{await db.collection("xiMarks").doc(`${exam}_${subject}`).set({locked:false,unlockedBy:currentUser.uid,unlockedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});marksLocked=false;updateMarksLockUI();renderMarks();alert("Marks unlocked by Admin.");}catch(e){alert("Unlock failed: "+e.message);}
+  try{await db.collection("xiMarks").doc(marksDocId(exam,subject,marksMed(subject))).set({locked:false,unlockedBy:currentUser.uid,unlockedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});marksLocked=false;updateMarksLockUI();renderMarks();alert("Marks unlocked by Admin"+(marksMed(subject)?" ("+medLabel(marksMed(subject))+" list only)":"")+".");}catch(e){alert("Unlock failed: "+e.message);}
 }
 function renderMarks(){
   const body=document.getElementById("marksBody");
@@ -1906,13 +1953,7 @@ function renderMarks(){
     return;
   }
 
-  const mediumFilter=(document.getElementById("marksMediumFilter")?.value||"BENGALI");
-  const rows=marksRows.filter(r=>{
-    const matchesSearch=Object.values(r.student).join(" ").toLowerCase().includes(q);
-    const isSantali=studentTakesSubject(r.student,"SANT");
-    const matchesMedium=mediumFilter==="ALL"||(mediumFilter==="SANTALI"?isSantali:!isSantali);
-    return matchesSearch&&matchesMedium;
-  });
+  const rows=marksRows.filter(r=>Object.values(r.student).join(" ").toLowerCase().includes(q));
 
   const semI=isSemI();
 
@@ -2002,12 +2043,14 @@ async function saveMarks(){
     return;
   }
 
-  const id=`${exam}_${subject}`;
+  const med=marksMed(subject);
+  const id=marksDocId(exam,subject,med);
 
   try{
     await db.collection("xiMarks").doc(id).set({
       exam,
       subject,
+      medium:med||null,
       rows:marksRows.map(r=>{
         const absent=marksAbsentKeys.has(studentKey(r.student));
         return {
@@ -2015,14 +2058,14 @@ async function saveMarks(){
           theory:absent?"":r.theory,
           component:absent?"":r.component
         };
-      }),
+      }).concat(marksLegacyExtra),
       locked:!!marksLocked,
       ownerUid:marksOwnerUid||currentUser?.uid||null,
       updatedBy:currentUser?.uid||null,
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()
     });
 
-    alert("Marks saved successfully.");
+    alert("Marks saved successfully"+(med?" ("+medLabel(med)+" list)":"")+".");
     updateDashboard();
   }catch(e){
     alert("Marks save failed: "+e.message);
@@ -2033,8 +2076,9 @@ async function deleteMarksSheet(){
   if(!requireAdmin()) return;
   const exam=document.getElementById("marksExam").value,subject=document.getElementById("marksSubject").value;
   if(!subject) return;
-  if(!confirm("DELETE all saved marks for "+subject+" ("+exam+")? This cannot be undone.")) return;
-  try{ await db.collection("xiMarks").doc(`${exam}_${subject}`).delete(); alert("Marks sheet deleted."); loadMarks(); }
+  const med=marksMed(subject);
+  if(!confirm("DELETE all saved marks for "+subject+(med?" — "+medLabel(med)+" list":"")+" ("+exam+")? This cannot be undone.")) return;
+  try{ await db.collection("xiMarks").doc(marksDocId(exam,subject,med)).delete(); alert("Marks sheet deleted."); loadMarks(); }
   catch(e){ alert("Delete failed: "+e.message); }
 }
 function printMarks(){
@@ -2053,7 +2097,8 @@ function printMarksEntrySheet(){
   if(!checkSubjectColumn(subject)) return;
   const scheme=SCHEMES[subject];
   if(!scheme){ alert("No marks scheme found for this subject."); return; }
-  const eligible=students.filter(s=>studentTakesSubject(s,subject));
+  const pmed=marksMed(subject);
+  const eligible=students.filter(s=>studentTakesSubject(s,subject)&&(!pmed||stuMed(s)===pmed));
   if(!eligible.length){ alert(`No students found with "${subject}" in the imported XI-REG sheet.`); return; }
 
   const examLabel=exam==="SEM1"?"Semester I":exam==="SUPP"?"Semester I Supplementary":"Semester II";
@@ -2077,7 +2122,7 @@ function printMarksEntrySheet(){
     headerLines:[
       `<div class="school">Taldangra Fulmati High School [H.S.]</div>`,
       `<div class="exam">XI-2026 Annual Examination — Marks Entry Sheet</div>`,
-      `<div class="meta"><span><b>Subject:</b> ${escapeHtml(subject)}</span><span><b>Examination:</b> ${examLabel}</span><span><b>Date:</b> ${escapeHtml(date)}</span><span><b>Class:</b> XI</span></div>`
+      `<div class="meta"><span><b>Subject:</b> ${escapeHtml(subject)}${pmed?" ("+medLabel(pmed)+")":""}</span><span><b>Examination:</b> ${examLabel}</span><span><b>Date:</b> ${escapeHtml(date)}</span><span><b>Class:</b> XI</span></div>`
     ],
     columns:["SL","Registration No.","Name",`Theory (Max ${scheme.theory})`,`${compLabel} (Max ${compMax})`,"Total"],
     rowsHtml,
@@ -2168,12 +2213,8 @@ async function generateCombined(){
 
   let sem1Rows=[],sem2Rows=[];
   try{
-    const [s1,s2]=await Promise.all([
-      db.collection("xiMarks").doc(`SEM1_${subject}`).get(),
-      db.collection("xiMarks").doc(`SEM2_${subject}`).get()
-    ]);
-    if(s1.exists) sem1Rows=s1.data().rows||[];
-    if(s2.exists) sem2Rows=s2.data().rows||[];
+    const [s1,s2]=await Promise.all([fetchMarksMerged("SEM1",subject),fetchMarksMerged("SEM2",subject)]);
+    sem1Rows=s1.rows; sem2Rows=s2.rows;
   }catch(e){
     alert("Could not load saved marks: "+e.message);
     return;
@@ -2250,7 +2291,8 @@ function renderCombined(){
 }
 
 async function upsertMark(exam,sub,student,vals){
-  const ref=db.collection("xiMarks").doc(`${exam}_${sub}`);
+  const med=isCommonXi(sub)?stuMed(student):"";
+  const ref=db.collection("xiMarks").doc(marksDocId(exam,sub,med));
   const snap=await ref.get(), d=snap.exists?snap.data():{};
   if(d.locked&&!isAdmin()) throw new Error(exam+" marks are locked. Only Admin can change them.");
   if(snap.exists&&!canEditUnlocked(d.ownerUid||d.updatedBy)) throw new Error("These marks are assigned to another staff member.");
@@ -2258,7 +2300,7 @@ async function upsertMark(exam,sub,student,vals){
   let row=rows.find(x=>studentKey(x.student)===key);
   if(!row){ row={student,theory:"",component:""}; rows.push(row); }
   Object.assign(row,vals);
-  const payload={exam,subject:sub,rows,updatedBy:currentUser?.uid||null,updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+  const payload={exam,subject:sub,medium:med||null,rows,updatedBy:currentUser?.uid||null,updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
   if(!snap.exists){ payload.ownerUid=currentUser?.uid||null; payload.locked=false; }
   await ref.set(payload,{merge:true});
 }
@@ -2319,11 +2361,13 @@ async function generateXiTab(){
   const data={}; xtPending=[];
   try{
     const jobs=[]; subs.forEach(c=>exams.forEach(e=>jobs.push([c,e])));
-    const snaps=await Promise.all(jobs.map(([c,e])=>db.collection("xiMarks").doc(`${e}_${c}`).get()));
+    const merged=await Promise.all(jobs.map(([c,e])=>fetchMarksMerged(e,c)));
     jobs.forEach(([c,e],i)=>{
-      const d=snaps[i]; data[c]=data[c]||{};
-      if(d.exists && d.data().locked){ const m={}; (d.data().rows||[]).forEach(r=>m[studentKey(r.student)]=r); data[c][e]=m; }
-      else{ data[c][e]=null; xtPending.push(`${c} ${e==="SEM1"?"Sem I":"Sem II"}`); }
+      const d=merged[i]; data[c]=data[c]||{};
+      const m={}; d.lockedRows.forEach(r=>m[studentKey(r.student)]=r); data[c][e]=m;
+      /* a medium that has no enrolled students does not hold the subject back */
+      const need=isCommonXi(c)?["Bengali-medium","Santali-medium"].filter(x=>students.some(st=>studentTakesSubject(st,c)&&stuMed(st)===(x[0]==="S"?"SANTALI":"BENGALI"))):[""];
+      d.pending.filter(x=>need.includes(x)).forEach(x=>xtPending.push(`${c} ${e==="SEM1"?"Sem I":"Sem II"}${x?" ("+x+")":""}`));
     });
   }catch(err){ box.textContent="Could not load marks: "+err.message; return; }
   xtCols=subs;
