@@ -3435,15 +3435,35 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
       msg.textContent='This account is already registered ('+currentRole.toUpperCase()+').';return;
     }
     msg.textContent='Registering…';
+    const reqDoc=(user)=>({name,email:user.email||email,role:'pending',assignedSubjects:[],requestedSubject:subReq,requestedMedium:medReq.join(','),medium:[],createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+    let user=auth.currentUser, stage='account';
     try{
-      let user=auth.currentUser;
-      if(!signed){ const cred=await auth.createUserWithEmailAndPassword(email,p1); user=cred.user; }
-      await db.collection('users').doc(user.uid).set({name,email:user.email||email,role:'pending',assignedSubjects:[],requestedSubject:subReq,requestedMedium:medReq.join(','),medium:[],createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+      if(!signed){
+        try{ const cred=await auth.createUserWithEmailAndPassword(email,p1); user=cred.user; }
+        catch(e){
+          if(e.code!=='auth/email-already-in-use') throw e;
+          /* account exists from an earlier attempt: sign in with the same email/password and check whether the approval request was saved */
+          try{ const cred=await auth.signInWithEmailAndPassword(email,p1); user=cred.user; }
+          catch(e2){ msg.textContent='This email is already registered. Enter the SAME password you used before (or use Forgot Password), then press Submit again.'; return; }
+        }
+      }
+      stage='request';
+      const ref=db.collection('users').doc(user.uid);
+      let existing=null;
+      try{ const sn=await ref.get(); if(sn.exists) existing=sn.data(); }catch(e){}
+      if(existing && String(existing.role||'viewer').toLowerCase()!=='viewer'){
+        await loadUserRole(user);
+        msg.textContent='This account is already registered ('+String(existing.role).toUpperCase()+'). '+(String(existing.role).toLowerCase()==='pending'?'Waiting for Headmaster approval.':'Use Sign In.');
+        return;
+      }
+      await ref.set(reqDoc(user));
       await loadUserRole(user);
       msg.textContent='Registered. Waiting for Headmaster approval — reopen your link after approval.';
       $('regPass').value='';$('regPass2').value='';
     }catch(e){
-      msg.textContent=(e.code==='auth/email-already-in-use')?'Email already registered — use Sign In.':'Registration failed: '+e.message;
+      msg.textContent=(stage==='request')
+        ? 'Account created but the approval request could not be saved ('+e.message+'). Press Submit for Approval once more; if it repeats, tell the Headmaster (Firestore rules for the users collection).'
+        : 'Registration failed: '+e.message;
     }
   };
 
