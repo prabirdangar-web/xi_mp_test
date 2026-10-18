@@ -2399,9 +2399,34 @@ async function generateXiTab(){
       const r1=m1[k],r2=m2[k]; if(!r1||!r2){missing++;return{state:"P"}}
       if(isBlank(r1.theory)&&isBlank(r2.theory)&&isBlank(r2.component)){abs++;return{state:"A"}}
       const a=Number(r1.theory)||0,b=Number(r2.theory)||0,x=Number(r2.component)||0,t=a+b+x; total+=t;
-      if(a<xtPassMin(th)||b<xtPassMin(th)||x<xtPassMin(cm))fail++;
-      return{state:"M",parts:[a,b,x],t,fm:th*2+cm};
+      const ok=!(a<xtPassMin(th)||b<xtPassMin(th)||x<xtPassMin(cm));
+      if(!ok)fail++;
+      return{state:"M",parts:[a,b,x],t,fm:th*2+cm,ok,code:c};
     });
+    if(mode==="COMB"){
+      /* WBCHSE Class XI rule: Grand Total = highest marks in FIVE subjects (2 languages + best 3 electives), Full Marks 500.
+         Pass = 30% in theory (Sem I & Sem II) and project/practical separately in those five; 6th subject is optional. */
+      const LANGS=["BNGA","SANT","ENGB"];
+      const L=[],E=[];
+      subs.forEach((c,i)=>{ if(!studentTakesSubject(st,c)) return; (LANGS.includes(c)?L:E).push({c,i,cell:cells[i]}); });
+      const mOf=o=>o.cell.state==="M";
+      const langBad=L.some(o=>o.cell.state==="M"&&!o.cell.ok), langMiss=L.some(o=>o.cell.state==="P"), langAbs=L.some(o=>o.cell.state==="A");
+      const elM=E.filter(mOf).sort((a,b)=>((b.cell.ok?1:0)-(a.cell.ok?1:0))||(b.cell.t-a.cell.t));
+      const best=elM.slice(0,3);
+      const counted=new Set(L.concat(best).map(o=>o.c));
+      cells.forEach((c,i)=>{ if(c.state!=="N") c.counted=counted.has(subs[i]); });
+      const t5=L.concat(best).filter(mOf).reduce((a,o)=>a+o.cell.t,0);
+      const elPending=E.some(o=>o.cell.state==="P"), elAbs=E.some(o=>o.cell.state==="A");
+      const elPassed=best.filter(o=>o.cell.ok).length;
+      let res;
+      if(langMiss) res="INCOMPLETE";
+      else if(langBad) res="FAIL";
+      else if(best.length<3) res=elPending?"INCOMPLETE":(elAbs||langAbs?"ABSENT":"FAIL");
+      else if(elPassed<3) res="FAIL";
+      else if(langAbs) res="ABSENT";
+      else res="PASS";
+      return{student:st,cells,total:t5,fm:500,pct:t5/500*100,fail,abs,missing,result:res};
+    }
     const result=missing?"INCOMPLETE":fail?"FAIL":abs?"ABSENT":"PASS";
     return{student:st,cells,total,fm,pct:fm?total/fm*100:0,fail,abs,missing,result};
   });
@@ -2411,7 +2436,7 @@ async function generateXiTab(){
     box.className="lockbox";
     box.textContent="⚠ PROVISIONAL — marks not yet locked for: "+[...new Set(xtPending)].join(", ")+". Ranks will change once all are locked.";
   }else{
-    box.className="lockbox ok"; box.textContent="✅ All required marks sheets are locked — "+XT_LABEL[mode]+". Rank is on grand total (ties share the same rank).";
+    box.className="lockbox ok"; box.textContent="✅ All required marks sheets are locked — "+XT_LABEL[mode]+"."+(mode==="COMB"?" WBCHSE rule: Grand Total = highest marks in 5 subjects (2 languages + best 3 electives), Full Marks 500; % = Total ÷ 500 × 100. 6th subject is shown but not counted (greyed).":"")+" Rank is on grand total (ties share the same rank).";
   }
   renderXiTab();
 }
@@ -2443,7 +2468,7 @@ function renderXiTab(){
   const full=document.getElementById("xtDetail").value==="full" && xtModeUsed!=="SEM1";
   const labels=xtSubLabels();
   const base=["SL","Rank","Registration No.","Name","Sex"];
-  const tail=["Grand Total","Full Marks","%","Result"];
+  const tail=[xtModeUsed==="COMB"?"Grand Total (Best 5)":"Grand Total","Full Marks","%","Result"];
   if(full){
     const sub=xtCols.map((c,i)=>{const l=labels[i].slice(); if(xtModeUsed==="SEM2") return l; return l;});
     head.innerHTML="<tr>"+base.map(h=>`<th rowspan="2">${h}</th>`).join("")+
@@ -2462,7 +2487,8 @@ function renderXiTab(){
       if(c.state==="P") return `<td colspan="${n}">—</td>`;
       if(c.state==="A") return `<td colspan="${n}" style="color:#b91c1c"><b>AB</b></td>`;
       const sc=SCHEMES[xtCols[ci]];
-      const bad=c.t<xtPassMin(c.fm)?' style="color:#b91c1c;font-weight:700"':"";
+      const dropped=(xtModeUsed==="COMB"&&c.counted===false);
+      const bad=dropped?' style="color:#94a3b8;font-style:italic" title="6th subject — not counted in the best five"':(c.t<xtPassMin(c.fm)?' style="color:#b91c1c;font-weight:700"':"");
       if(!full) return `<td${bad}>${c.t}</td>`;
       const parts=xtModeUsed==="SEM2"?[...c.parts,c.t]:xtModeUsed==="COMB"?[...c.parts,c.t]:[c.t];
       return parts.map((v,k)=>`<td${k===parts.length-1?bad:""}>${v}</td>`).join("");
