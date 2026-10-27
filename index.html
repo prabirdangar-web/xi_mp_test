@@ -447,6 +447,8 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
       </div>
       <button class="btn" onclick="importExcel()">Import Excel</button>
       <button id="addStudentBtn" class="btn" style="display:none" onclick="addStudent()">➕ Add Student</button>
+      <button id="importDobBtn" class="btn warning" style="display:none" onclick="document.getElementById('dobFile').click()" title="Adds Date of Birth and Banglar Siksha ID where missing">📅 Import DOB / BS ID</button>
+      <input type="file" id="dobFile" accept=".xlsx,.xls,.csv,.json" style="display:none">
       <button id="saveStudentsBtn" class="btn success" onclick="saveStudents()">Save All Students</button>
       <button class="btn secondary" onclick="printStudents()">Print</button>
     </div>
@@ -799,7 +801,13 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
   </div>
   <div class="panel">
     <div class="toolbar">
-      <div class="field" style="flex:1;min-width:200px"><label>Registration No.</label><input id="rvReg" placeholder="Enter your Registration No." autocomplete="off"></div>
+      <div class="field"><label>Registration No.</label><input id="rvReg" placeholder="Registration No." autocomplete="off"></div>
+      <div class="field"><label>Date of Birth</label><input id="rvDob" type="date"></div>
+      <div class="field"><label>Banglar Siksha ID</label><input id="rvBs" placeholder="14-digit B.S. ID" autocomplete="off" inputmode="numeric" maxlength="14"></div>
+      <div class="field"><label>Roll No.</label><input id="rvRoll" placeholder="Roll No." autocomplete="off" style="min-width:90px;width:100px"></div>
+    </div>
+    <div class="rv-note" style="margin:0 0 10px">Fill in <b>at least any two</b> of the four boxes above (e.g. Registration No. + Date of Birth).</div>
+    <div class="toolbar">
       <div class="field"><label>Subject</label><select id="rvSub"></select></div>
       <div class="field"><label>Result of</label>
         <select id="rvExam"><option value="COMB">Combined (Sem I + Sem II + Project/Practical)</option><option value="SEM1">Semester I</option><option value="SEM2">Semester II</option></select></div>
@@ -1175,7 +1183,7 @@ function applyRoleUI(){
     else msg.textContent="Read-only until an authorised existing staff account is signed in.";
   }
 
-  const adminIds=["saveStudentsBtn","addStudentBtn","deleteAttendanceBtn","deleteMarksBtn","unlockAttendanceBtn","unlockMarksBtn","unlockResultBtn"];
+  const adminIds=["saveStudentsBtn","addStudentBtn","importDobBtn","deleteAttendanceBtn","deleteMarksBtn","unlockAttendanceBtn","unlockMarksBtn","unlockResultBtn"];
   const ns=document.getElementById("navSubjects"); if(ns) ns.style.display=isAdmin()?"block":"none";
   adminIds.forEach(id=>{const el=document.getElementById(id); if(el) el.style.display=isAdmin()?"inline-block":"none";});
 
@@ -3671,12 +3679,73 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
   const base=location.origin+location.pathname;
   const mkLink=(subs,exam)=>base+'?m=result&sub='+encodeURIComponent(subs)+(exam?'&exam='+exam:'');
 
+  /* ---------- identity helpers (DOB stored as DD-MM-YYYY) ---------- */
+  const nk=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  function normDob(v){
+    if(v===null||v===undefined||v==='') return '';
+    if(v instanceof Date&&!isNaN(v)) return String(v.getDate()).padStart(2,'0')+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+v.getFullYear();
+    if(typeof v==='number'&&v>20000&&v<80000){ const d=new Date(Math.round((v-25569)*86400000)); return String(d.getUTCDate()).padStart(2,'0')+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+d.getUTCFullYear(); }
+    const t=String(v).trim(); let m;
+    if((m=/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/.exec(t))) return m[3].padStart(2,'0')+'-'+m[2].padStart(2,'0')+'-'+m[1];
+    if((m=/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/.exec(t))) return m[1].padStart(2,'0')+'-'+m[2].padStart(2,'0')+'-'+m[3];
+    return '';
+  }
+  const fieldBy=(st,test)=>{ const k=Object.keys(st).find(k=>test(nk(k))); return k?st[k]:''; };
+  const getDob=st=>normDob(fieldBy(st,k=>k==='dob'||k==='dateofbirth'||k==='birthdate'||k==='dateofbirthddmmyyyy'));
+  /* B.S. Portal ID is 14 digits; shorter entries (leading 0 dropped) are padded on the left with zeros */
+  const normBs=v=>{ const d=String(v==null?'':v).replace(/\D/g,''); return d?d.padStart(14,'0'):''; };
+  const getBs=st=>normBs(fieldBy(st,k=>k.includes('siksha')||k==='bsid'||k==='bsportalid'));
+  const getRoll=st=>String(fieldBy(st,k=>k==='roll'||k==='rollno'||k==='rollnumber')||'').trim().toUpperCase();
+  const nameKey=v=>String(v||'').toUpperCase().replace(/[^A-Z ]/g,' ').replace(/\s+/g,' ').trim();
+
+  /* ---------- Admin: add DOB / Banglar Siksha ID from the PDF-derived list (only where missing) ---------- */
+  (function(){
+    const inp=document.getElementById('dobFile'); if(!inp) return;
+    inp.onchange=async()=>{
+      const file=inp.files[0]; inp.value=''; if(!file) return;
+      if(!requireAdmin()) return;
+      if(!students.length){ alert('Load the Class XI student list first.'); return; }
+      try{
+        let recs;
+        if(/\.json$/i.test(file.name)) recs=JSON.parse(await file.text());
+        else{ const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true}); recs=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''}); }
+        const pick=(r,test)=>{ const k=Object.keys(r).find(k=>test(nk(k))); return k?r[k]:''; };
+        const list=recs.map(r=>({name:nameKey(pick(r,k=>k==='name'||k==='nameofstudent'||k==='studentname')),roll:String(pick(r,k=>k==='roll'||k==='rollno')).trim().toUpperCase(),
+          dob:normDob(pick(r,k=>k==='dob'||k==='dateofbirth')),bs:normBs(pick(r,k=>k.includes('siksha')||k==='bsid'))})).filter(r=>r.name);
+        if(!list.length){ alert('No student rows found in this file. Expected columns: Name, Roll, DOB, Banglar Siksha ID.'); return; }
+        const byName={}; list.forEach(r=>(byName[r.name]=byName[r.name]||[]).push(r));
+        let addDob=0,addBs=0,had=0,none=[],amb=[];
+        const todo=[];
+        students.forEach(st=>{
+          const needDob=!getDob(st), needBs=!getBs(st);
+          if(!needDob&&!needBs){ had++; return; }
+          let c=byName[nameKey(getStudentName(st))]||[];
+          if(c.length>1){ const r=getRoll(st); const c2=c.filter(x=>x.roll===r); if(c2.length) c=c2; }
+          if(!c.length){ none.push(getStudentName(st)); return; }
+          if(c.length>1){ amb.push(getStudentName(st)); return; }
+          todo.push([st,c[0],needDob,needBs]);
+        });
+        todo.forEach(([st,r,nd,nb])=>{ if(nd&&r.dob) addDob++; if(nb&&r.bs) addBs++; });
+        const msgT='Students in portal: '+students.length+'\nAlready complete (DOB + BS ID present): '+had+'\nDOB to be added: '+addDob+'\nBanglar Siksha ID to be added: '+addBs+
+          '\nNot found in file: '+none.length+(none.length?' ('+none.slice(0,10).join(', ')+(none.length>10?', …':'')+')':'')+
+          '\nAmbiguous (same name): '+amb.length+(amb.length?' ('+amb.slice(0,10).join(', ')+')':'')+'\n\nExisting DOB/ID values are NOT changed. Save these additions now?';
+        if(!addDob&&!addBs){ alert(msgT.split('\n\nExisting')[0]+'\n\nNothing to add.'); return; }
+        if(!confirm(msgT)) return;
+        const backup=JSON.stringify(students);
+        todo.forEach(([st,r,nd,nb])=>{ if(nd&&r.dob) st['DOB']=r.dob; if(nb&&r.bs) st['Banglar Siksha ID']=r.bs; });
+        if(importedHeaders.length){ ['DOB','Banglar Siksha ID'].forEach(h=>{ if(!importedHeaders.includes(h)&&students.some(x=>x[h])) importedHeaders.push(h); }); }
+        try{ await persistStudents(); alert('Saved. DOB added: '+addDob+', Banglar Siksha ID added: '+addBs+'.'); }
+        catch(e){ students=JSON.parse(backup); renderStudents(); alert('Save failed: '+e.message); }
+      }catch(e){ alert('Could not read the file: '+e.message); }
+    };
+  })();
+
   /* ---------- Admin: result link generator (inside Subjects & Exam Schedule) ---------- */
   (function(){
     const host=document.getElementById('subjects'); if(!host) return;
     const box=document.createElement('div'); box.className='panel ml-panel';
     box.innerHTML='<h3 style="margin:0 0 6px">🎓 Result View Link — send to students</h3>'+
-      '<div class="subtitle" style="margin-bottom:8px">The link opens ONLY the result window. The student enters the Registration No. and selects a subject. Only locked marks are shown.</div>'+
+      '<div class="subtitle" style="margin-bottom:8px">The link opens ONLY the result window. The student must enter at least two of: Registration No., Date of Birth, Banglar Siksha ID, Roll No., then selects a subject. Only locked marks are shown.</div>'+
       '<div class="toolbar"><div class="field"><label>Default result type</label><select class="rl-exam"><option value="">Student chooses</option><option value="COMB">Combined</option><option value="SEM1">Semester I</option><option value="SEM2">Semester II</option></select></div>'+
       '<button class="btn rl-gen">Build Link</button></div><div class="rl-out" style="margin-top:8px"></div>';
     host.appendChild(box);
@@ -3690,7 +3759,7 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
         const all=out.querySelector('.rl-all').checked, picked=[...out.querySelectorAll('.rl-chk:checked')].map(x=>x.value);
         const ex=box.querySelector('.rl-exam').value, u=(all||!picked.length)?mkLink('*',ex):mkLink(picked.join(','),ex);
         out.querySelector('.rl-url').value=u; out.querySelector('.rl-open').href=u;
-        const m='নমস্কার,\n\nTFHS Class XI-এর রেজাল্ট দেখতে নিচের লিঙ্কটি খুলুন। রেজিস্ট্রেশন নম্বর লিখে বিষয় বেছে "View Result" চাপুন।\n\nলিঙ্ক: '+u+'\n\nধন্যবাদ।\nপ্রধান শিক্ষক, Taldangra Fulmati High School [H.S.]';
+        const m='নমস্কার,\n\nTFHS Class XI-এর রেজাল্ট দেখতে নিচের লিঙ্কটি খুলুন। রেজিস্ট্রেশন নম্বর, জন্মতারিখ, Banglar Siksha ID বা রোল নম্বর — যেকোনো অন্তত দুটি লিখে বিষয় বেছে "View Result" চাপুন।\n\nলিঙ্ক: '+u+'\n\nধন্যবাদ।\nপ্রধান শিক্ষক, Taldangra Fulmati High School [H.S.]';
         out.querySelector('.rl-wa').href='https://wa.me/?text='+encodeURIComponent(m);
       };
       out.querySelectorAll('input[type=checkbox]').forEach(x=>x.onchange=()=>{
@@ -3747,14 +3816,21 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
   const show=v=>v===undefined?'<span style="color:#94a3b8">Awaited</span>':(v==='AB'?'<b style="color:#b91c1c">AB</b>':v);
 
   async function go(){
-    const reg=$('rvReg').value.trim().toUpperCase();
-    if(!reg){ msg('Please enter your Registration No.'); return; }
+    const q={reg:$('rvReg').value.trim().toUpperCase(),dob:normDob($('rvDob').value),bs:normBs($('rvBs').value),roll:$('rvRoll').value.trim().toUpperCase()};
+    if($('rvDob').value&&!q.dob){ msg('Date of Birth is not valid.'); return; }
+    if([q.reg,q.dob,q.bs,q.roll].filter(Boolean).length<2){ msg('Please fill in at least any two of: Registration No., Date of Birth, Banglar Siksha ID, Roll No.'); return; }
     $('rvOut').innerHTML=''; msg('Loading…',false);
     $('rvGo').disabled=true;
     try{
       await ready();
-      const st=students.find(s=>String(getStudentReg(s)||'').trim().toUpperCase()===reg);
-      if(!st){ msg('Registration No. not found. Please check and try again.'); return; }
+      const hits=students.filter(s=>
+        (!q.reg||String(getStudentReg(s)||'').trim().toUpperCase()===q.reg)&&
+        (!q.dob||getDob(s)===q.dob)&&
+        (!q.bs||getBs(s)===q.bs)&&
+        (!q.roll||getRoll(s)===q.roll));
+      if(!hits.length){ msg('No matching record found. Please check the details you entered. If your Date of Birth or Banglar Siksha ID is not on record, contact the school.'); return; }
+      if(hits.length>1){ msg('More than one student matches. Please fill in one more detail (for example Registration No.).'); return; }
+      const st=hits[0];
       const mode=$('rvExam').value, choice=$('rvSub').value;
       const pool=(choice==='*'?allowed():[choice]).filter(c=>studentTakesSubject(st,c));
       if(!pool.length){ msg('You are not enrolled in the selected subject(s).'); return; }
@@ -3796,7 +3872,7 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
     finally{ $('rvGo').disabled=false; }
   }
   $('rvGo').onclick=go;
-  $('rvReg').addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
+  ['rvReg','rvDob','rvBs','rvRoll'].forEach(id=>$(id).addEventListener('keydown',e=>{ if(e.key==='Enter') go(); }));
 })();
 </script>
 </body>
