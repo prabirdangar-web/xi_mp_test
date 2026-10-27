@@ -253,6 +253,17 @@ body.marks-only .content{padding:14px}
 .stfoot{display:flex;gap:10px;justify-content:flex-end;padding:12px 18px;border-top:1px solid #e2e8f0;background:#f8fafc}
 .stempty{padding:20px;color:#64748b}
 @media(max-width:900px){.stbody{grid-template-columns:1fr}}
+
+/* ---- result-only link mode (?m=result&sub=CODE) ---- */
+body.result-only .sidebar,body.result-only .rolebar,body.result-only #regBox,body.result-only .topbar,body.result-only .footer{display:none!important}
+body.result-only .main{margin-left:0!important;width:100%!important}
+body.result-only .app{display:block!important}
+body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
+.rv-head{text-align:center;margin-bottom:16px}
+.rv-school{font-size:20px;font-weight:800;color:#0f172a}
+.rv-title{font-size:15px;color:#475569;margin-top:4px}
+.rv-who{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:14px;line-height:1.7}
+.rv-note{font-size:12px;color:#64748b;margin-top:10px}
 </style>
 </head>
 
@@ -780,6 +791,24 @@ body.marks-only .content{padding:14px}
   </div>
 </section>
 
+
+<section id="rv_view" class="view">
+  <div class="rv-head">
+    <div class="rv-school">Taldangra Fulmati High School [H.S.]</div>
+    <div class="rv-title">Class XI — Result View</div>
+  </div>
+  <div class="panel">
+    <div class="toolbar">
+      <div class="field" style="flex:1;min-width:200px"><label>Registration No.</label><input id="rvReg" placeholder="Enter your Registration No." autocomplete="off"></div>
+      <div class="field"><label>Subject</label><select id="rvSub"></select></div>
+      <div class="field"><label>Result of</label>
+        <select id="rvExam"><option value="COMB">Combined (Sem I + Sem II + Project/Practical)</option><option value="SEM1">Semester I</option><option value="SEM2">Semester II</option></select></div>
+      <button class="btn" id="rvGo">View Result</button>
+    </div>
+    <div id="rvMsg" class="lockbox" style="display:none"></div>
+  </div>
+  <div id="rvOut"></div>
+</section>
 
 <!-- ============ CLASS X — MP (SE) 2027 SELECTION TEST ============ -->
 <section id="mp_dashboard" class="view active">
@@ -3628,6 +3657,146 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
     $('shCopy').onclick=async()=>{ try{await navigator.clipboard.writeText(mk());$('shCopy').textContent='Copied ✔';setTimeout(()=>$('shCopy').textContent='Copy Link',1500);}catch(e){prompt('Copy link:',mk());} };
     $('shWa').onclick=()=>window.open('https://wa.me/?text='+encodeURIComponent(msg()),'_blank');
   })();
+})();
+</script>
+
+<script>
+/* ===================== RESULT VIEW LINKS =====================
+   Link: index.html?m=result&sub=CODE | CODE1,CODE2 | *      (optional &exam=COMB|SEM1|SEM2)
+   Opens ONLY a result window: student enters Registration No., picks subject, sees result.
+   Only LOCKED marks sheets are shown. */
+(function(){
+  const P=new URLSearchParams(location.search);
+  const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const base=location.origin+location.pathname;
+  const mkLink=(subs,exam)=>base+'?m=result&sub='+encodeURIComponent(subs)+(exam?'&exam='+exam:'');
+
+  /* ---------- Admin: result link generator (inside Subjects & Exam Schedule) ---------- */
+  (function(){
+    const host=document.getElementById('subjects'); if(!host) return;
+    const box=document.createElement('div'); box.className='panel ml-panel';
+    box.innerHTML='<h3 style="margin:0 0 6px">🎓 Result View Link — send to students</h3>'+
+      '<div class="subtitle" style="margin-bottom:8px">The link opens ONLY the result window. The student enters the Registration No. and selects a subject. Only locked marks are shown.</div>'+
+      '<div class="toolbar"><div class="field"><label>Default result type</label><select class="rl-exam"><option value="">Student chooses</option><option value="COMB">Combined</option><option value="SEM1">Semester I</option><option value="SEM2">Semester II</option></select></div>'+
+      '<button class="btn rl-gen">Build Link</button></div><div class="rl-out" style="margin-top:8px"></div>';
+    host.appendChild(box);
+    box.querySelector('.rl-gen').onclick=()=>{
+      const codes=[...document.querySelectorAll('#marksSubject option')].map(o=>o.value).filter(Boolean);
+      const out=box.querySelector('.rl-out');
+      out.innerHTML='<label style="display:inline-block;margin:3px 12px 3px 0;font-size:12px"><input type="checkbox" class="rl-all" checked> <b>All subjects</b></label>'+
+        codes.map(c=>'<label style="display:inline-block;margin:3px 12px 3px 0;font-size:12px"><input type="checkbox" class="rl-chk" value="'+esc(c)+'"> '+esc(c+(XI_NAMES[c]?' - '+XI_NAMES[c]:''))+'</label>').join('')+
+        '<div class="toolbar" style="margin-top:8px"><input class="ml-url rl-url" readonly><button class="btn light rl-copy">Copy</button> <a class="btn light rl-wa" style="text-decoration:none;display:inline-block" target="_blank" rel="noopener" href="#">WhatsApp</a> <a class="btn light rl-open" style="text-decoration:none;display:inline-block" target="_blank" rel="noopener" href="#">Preview</a></div>';
+      const upd=()=>{
+        const all=out.querySelector('.rl-all').checked, picked=[...out.querySelectorAll('.rl-chk:checked')].map(x=>x.value);
+        const ex=box.querySelector('.rl-exam').value, u=(all||!picked.length)?mkLink('*',ex):mkLink(picked.join(','),ex);
+        out.querySelector('.rl-url').value=u; out.querySelector('.rl-open').href=u;
+        const m='নমস্কার,\n\nTFHS Class XI-এর রেজাল্ট দেখতে নিচের লিঙ্কটি খুলুন। রেজিস্ট্রেশন নম্বর লিখে বিষয় বেছে "View Result" চাপুন।\n\nলিঙ্ক: '+u+'\n\nধন্যবাদ।\nপ্রধান শিক্ষক, Taldangra Fulmati High School [H.S.]';
+        out.querySelector('.rl-wa').href='https://wa.me/?text='+encodeURIComponent(m);
+      };
+      out.querySelectorAll('input[type=checkbox]').forEach(x=>x.onchange=()=>{
+        if(x.classList.contains('rl-chk')&&x.checked) out.querySelector('.rl-all').checked=false;
+        if(x.classList.contains('rl-all')&&x.checked) out.querySelectorAll('.rl-chk').forEach(y=>y.checked=false);
+        upd();
+      });
+      box.querySelector('.rl-exam').onchange=upd;
+      out.querySelector('.rl-copy').onclick=async()=>{const v=out.querySelector('.rl-url').value; try{await navigator.clipboard.writeText(v);}catch(e){prompt('Copy link:',v);}};
+      upd();
+    };
+  })();
+
+  /* ---------- Student: result-only window ---------- */
+  if((P.get('m')||'').toLowerCase()!=='result') return;
+  document.body.classList.add('result-only');
+  document.title='Class XI Result — TFHS';
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('rv_view').classList.add('active');
+
+  const wanted=(P.get('sub')||'*').split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
+  const anySub=wanted.includes('*');
+  const preExam=(P.get('exam')||'').toUpperCase();
+  const $=id=>document.getElementById(id);
+  const msg=(t,ok)=>{const m=$('rvMsg'); m.style.display=t?'block':'none'; m.className='lockbox'+(ok?' ok':''); m.textContent=t||'';};
+  if(['COMB','SEM1','SEM2'].includes(preExam)){ $('rvExam').value=preExam; $('rvExam').closest('.field').style.display='none'; }
+
+  let cfgDone=false;
+  async function ready(){
+    for(let i=0;i<60&&!auth.currentUser;i++) await new Promise(r=>setTimeout(r,250));
+    if(!auth.currentUser) throw new Error('Could not connect. Please check your internet and try again.');
+    if(!students.length){
+      const s=await db.collection('students').doc('xi2026').get();
+      if(s.exists&&Array.isArray(s.data().students)) students=s.data().students;
+    }
+    if(!cfgDone){
+      try{ const c=await db.collection('students').doc('xiConfig').get();
+        if(c.exists&&c.data().schemes){ SCHEMES=c.data().schemes; EXAM_SCHEDULE=c.data().schedule||{}; refreshSubjectLists(); } }catch(e){}
+      cfgDone=true;
+    }
+    fillSubjects();
+  }
+  function allowed(){ return (anySub?Object.keys(SCHEMES):wanted).filter(c=>SCHEMES[c]); }
+  function fillSubjects(){
+    const sel=$('rvSub'), cur=sel.value, list=allowed();
+    sel.innerHTML=(list.length>1||anySub?'<option value="*">All subjects</option>':'')+list.map(c=>'<option value="'+esc(c)+'">'+esc(c+(XI_NAMES[c]?' - '+XI_NAMES[c]:''))+'</option>').join('');
+    if(cur&&[...sel.options].some(o=>o.value===cur)) sel.value=cur;
+  }
+  fillSubjects();
+  ready().catch(e=>msg(e.message));
+
+  const pm=m=>Math.ceil(m*0.30);
+  function val(r,f){ if(!r) return undefined; const v=r[f]; return (v===''||v===undefined||v===null)?'AB':(Number(v)||0); }
+  const show=v=>v===undefined?'<span style="color:#94a3b8">Awaited</span>':(v==='AB'?'<b style="color:#b91c1c">AB</b>':v);
+
+  async function go(){
+    const reg=$('rvReg').value.trim().toUpperCase();
+    if(!reg){ msg('Please enter your Registration No.'); return; }
+    $('rvOut').innerHTML=''; msg('Loading…',false);
+    $('rvGo').disabled=true;
+    try{
+      await ready();
+      const st=students.find(s=>String(getStudentReg(s)||'').trim().toUpperCase()===reg);
+      if(!st){ msg('Registration No. not found. Please check and try again.'); return; }
+      const mode=$('rvExam').value, choice=$('rvSub').value;
+      const pool=(choice==='*'?allowed():[choice]).filter(c=>studentTakesSubject(st,c));
+      if(!pool.length){ msg('You are not enrolled in the selected subject(s).'); return; }
+      const exams=mode==='SEM1'?['SEM1']:mode==='SEM2'?['SEM2']:['SEM1','SEM2'];
+      const jobs=[]; pool.forEach(c=>exams.forEach(e=>jobs.push([c,e])));
+      const res=await Promise.all(jobs.map(([c,e])=>fetchMarksMerged(e,c)));
+      const k=studentKey(st), got={};
+      jobs.forEach(([c,e],i)=>{ got[c]=got[c]||{}; got[c][e]=res[i].lockedRows.find(r=>studentKey(r.student)===k); });
+      const head=mode==='SEM1'?['Sem I Theory']:mode==='SEM2'?['Sem II Theory','Practical / Project']:['Sem I Theory','Sem II Theory','Practical / Project'];
+      let pending=0;
+      const rows=pool.map(c=>{
+        const sc=SCHEMES[c], cm=sc.practical||sc.project, r1=got[c].SEM1, r2=got[c].SEM2;
+        let cols,total=null,result='';
+        if(mode==='SEM1'){
+          const a=val(r1,'theory'); cols=[a];
+          if(a===undefined) pending++; else if(a==='AB') result='ABSENT'; else{ total=a; result=a>=pm(sc.theory)?'PASS':'FAIL'; }
+        }else if(mode==='SEM2'){
+          const a=val(r2,'theory'), b=val(r2,'component'); cols=[a,b];
+          if(a===undefined) pending++; else if(a==='AB'&&b==='AB') result='ABSENT';
+          else{ const x=a==='AB'?0:a,y=b==='AB'?0:b; total=x+y; result=(x>=pm(sc.theory)&&y>=pm(cm))?'PASS':'FAIL'; }
+        }else{
+          const a=val(r1,'theory'), b=val(r2,'theory'), x=val(r2,'component'); cols=[a,b,x];
+          if(a===undefined||b===undefined) pending++;
+          else if(a==='AB'&&b==='AB'&&x==='AB') result='ABSENT';
+          else{ const n=v=>v==='AB'?0:v; total=n(a)+n(b)+n(x); result=(n(a)>=pm(sc.theory)&&n(b)>=pm(sc.theory)&&n(x)>=pm(cm))?'PASS':'FAIL'; }
+        }
+        const fm=mode==='SEM1'?sc.theory:mode==='SEM2'?sc.theory+cm:sc.theory*2+cm;
+        const badge=result?'<span class="badge '+(result==='PASS'?'pass':'fail')+'">'+result+'</span>':'<span style="color:#94a3b8">Awaited</span>';
+        return '<tr><td style="text-align:left"><b>'+esc(c)+'</b>'+(XI_NAMES[c]?'<br><small style="color:#64748b">'+esc(XI_NAMES[c])+'</small>':'')+'</td>'+cols.map(v=>'<td>'+show(v)+'</td>').join('')+'<td><b>'+(total===null?'—':total)+'</b> / '+fm+'</td><td>'+badge+'</td></tr>';
+      }).join('');
+      const nm=String(getStudentName(st)||'');
+      const label=mode==='SEM1'?'Semester I':mode==='SEM2'?'Semester II':'Combined';
+      $('rvOut').innerHTML='<div class="panel"><div class="rv-who"><b>'+esc(nm)+'</b><br>Registration No.: '+esc(getStudentReg(st))+' &nbsp;|&nbsp; Roll: '+esc(getStudentRoll(st))+' &nbsp;|&nbsp; Sex: '+esc(getStudentSex(st))+'<br>Result: '+label+'</div>'+
+        '<div class="tablewrap" style="margin-top:0"><table style="min-width:420px"><thead><tr><th>Subject</th>'+head.map(h=>'<th>'+h+'</th>').join('')+'<th>Total</th><th>Result</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+        '<div class="rv-note">AB = Absent. "Awaited" = marks not yet finalised by the school. Only finalised (locked) marks are shown. For official results refer to the school.</div>'+
+        '<div class="toolbar noprint" style="margin-top:10px"><button class="btn secondary" onclick="window.print()">Print</button></div></div>';
+      msg(pending?'Some subjects are still awaiting finalised marks.':'');
+    }catch(e){ msg('Could not load result: '+e.message); }
+    finally{ $('rvGo').disabled=false; }
+  }
+  $('rvGo').onclick=go;
+  $('rvReg').addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
 })();
 </script>
 </body>
