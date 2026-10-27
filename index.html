@@ -2800,7 +2800,7 @@ let PROGRAMME={
   BIOS:{name:"LIFE SCIENCE",date:"28-11-2026"}
 };
 let SUBJECTS=Object.keys(PROGRAMME);
-const PASS_MARK=30; // Change this value if your school uses a different pass mark out of 100.
+const PASS_MARK=25; // Pass mark out of 100 for Class X MP (SE) 2027 Selection Test (Madhyamik pattern): 25 in each subject.
 const currentExam="MP-SE-2027";
 
 let students=[], attendanceRows=[], marksRows=[], resultRows=[];
@@ -4072,7 +4072,7 @@ function parseListPages(pages){
           const r=ok?(d.data().rows||[]).find(x=>keyX(x.student)===k):null;
           if(!r){ pending++; return '<tr><td style="text-align:left"><b>'+esc(prog[c])+'</b></td><td>'+show(undefined)+'</td><td>'+show(undefined)+'</td><td>—</td><td><span style="color:#94a3b8">Awaited</span></td></tr>'; }
           if(r.absent){ absn++; return '<tr><td style="text-align:left"><b>'+esc(prog[c])+'</b></td><td>'+show('AB')+'</td><td>'+show('AB')+'</td><td>—</td><td><span class="badge fail">ABSENT</span></td></tr>'; }
-          const w=Number(r.written)||0, f=Number(r.ife)||0, t=w+f, pass=t>=30; grand+=t; if(!pass) fails++;
+          const w=Number(r.written)||0, f=Number(r.ife)||0, t=w+f, pass=t>=25; grand+=t; if(!pass) fails++;
           return '<tr><td style="text-align:left"><b>'+esc(prog[c])+'</b></td><td>'+w+'</td><td>'+f+'</td><td><b>'+t+'</b> / 100</td><td><span class="badge '+(pass?'pass':'fail')+'">'+(pass?'PASS':'FAIL')+'</span></td></tr>';
         }).join('');
         const done=pool.length-pending;
@@ -4080,7 +4080,7 @@ function parseListPages(pages){
         $('rvxOut').innerHTML='<div class="panel"><div class="rv-who"><b>'+esc(nameX(st))+'</b><br>B.S. Portal ID: '+esc(normBs(regX(st)))+' &nbsp;|&nbsp; Class X-'+esc(secX(st))+' &nbsp;|&nbsp; Roll: '+esc(rollX(st))+'</div>'+
           '<div class="tablewrap" style="margin-top:0"><table style="min-width:420px"><thead><tr><th>Subject</th><th>Written / 90</th><th>IFE / 10</th><th>Total</th><th>Result</th></tr></thead><tbody>'+rows+
           (choice==='*'&&pool.length>1?'<tr style="background:#f1f5f9;font-weight:700"><td style="text-align:left">GRAND TOTAL ('+done+' of '+pool.length+' subjects)</td><td></td><td></td><td>'+grand+' / '+(done*100)+'</td><td>'+overall+'</td></tr>':'')+
-          '</tbody></table></div><div class="rv-note">AB = Absent. "Awaited" = marks not yet finalised by the school. Only finalised (locked) marks are shown. Pass mark: 30 out of 100 in each subject. For official results refer to the school.</div>'+
+          '</tbody></table></div><div class="rv-note">AB = Absent. "Awaited" = marks not yet finalised by the school. Only finalised (locked) marks are shown. Pass mark: 25 out of 100 in each subject. For official results refer to the school.</div>'+
           '<div class="toolbar noprint" style="margin-top:10px"><button class="btn secondary" onclick="window.print()">Print</button></div></div>';
         msg(pending?'Some subjects are still awaiting finalised marks.':'');
       }catch(e){ msg('Could not load result: '+e.message); }
