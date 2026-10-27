@@ -447,8 +447,8 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
       </div>
       <button class="btn" onclick="importExcel()">Import Excel</button>
       <button id="addStudentBtn" class="btn" style="display:none" onclick="addStudent()">➕ Add Student</button>
-      <button id="importDobBtn" class="btn warning" style="display:none" onclick="document.getElementById('dobFile').click()" title="Adds Date of Birth and Banglar Siksha ID where missing">📅 Import DOB / BS ID</button>
-      <input type="file" id="dobFile" accept=".xlsx,.xls,.csv,.json" style="display:none">
+      <button id="importDobBtn" class="btn warning" style="display:none" onclick="document.getElementById('dobFile').click()" title="Adds Date of Birth and Banglar Siksha ID where missing">📅 Import DOB / BS ID (PDF)</button>
+      <input type="file" id="dobFile" accept=".pdf,.xlsx,.xls,.csv,.json" style="display:none">
       <button id="saveStudentsBtn" class="btn success" onclick="saveStudents()">Save All Students</button>
       <button class="btn secondary" onclick="printStudents()">Print</button>
     </div>
@@ -818,6 +818,28 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
   <div id="rvOut"></div>
 </section>
 
+<section id="rvx_view" class="view">
+  <div class="rv-head">
+    <div class="rv-school">Taldangra Fulmati High School [H.S.]</div>
+    <div class="rv-title">Class X — MP (SE) 2027 Selection Test — Result View</div>
+  </div>
+  <div class="panel">
+    <div class="toolbar">
+      <div class="field"><label>B.S. Portal ID</label><input id="rvxBs" placeholder="14-digit B.S. ID" autocomplete="off" inputmode="numeric" maxlength="14"></div>
+      <div class="field"><label>Date of Birth</label><input id="rvxDob" type="date"></div>
+      <div class="field"><label>Roll No.</label><input id="rvxRoll" placeholder="Roll No." autocomplete="off" style="min-width:90px;width:100px"></div>
+      <div class="field"><label>Section (optional)</label><input id="rvxSec" placeholder="e.g. A" autocomplete="off" style="min-width:80px;width:90px" maxlength="3"></div>
+    </div>
+    <div class="rv-note" style="margin:0 0 10px">Fill in <b>at least any two</b> of: B.S. Portal ID, Date of Birth, Roll No. (Section is optional and only narrows the search).</div>
+    <div class="toolbar">
+      <div class="field"><label>Subject</label><select id="rvxSub"></select></div>
+      <button class="btn" id="rvxGo">View Result</button>
+    </div>
+    <div id="rvxMsg" class="lockbox" style="display:none"></div>
+  </div>
+  <div id="rvxOut"></div>
+</section>
+
 <!-- ============ CLASS X — MP (SE) 2027 SELECTION TEST ============ -->
 <section id="mp_dashboard" class="view active">
   <div class="title">MP (SE) 2027 Selection Test Dashboard</div>
@@ -860,6 +882,8 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
       <button class="btn" onclick="MP.importExcel()">Import Excel</button>
       <button id="mp_saveStudentsBtn" class="btn success" onclick="MP.saveStudents()">Save Students</button>
       <button class="btn secondary" onclick="MP.addStudent()">Add Student</button>
+      <button id="mp_importDobBtn" class="btn warning" style="display:none" onclick="document.getElementById('mp_dobFile').click()" title="Adds Date of Birth from the student list PDF where missing">📅 Import DOB (PDF)</button>
+      <input type="file" id="mp_dobFile" accept=".pdf,.xlsx,.xls,.csv,.json" style="display:none">
       <button class="btn secondary" onclick="MP.printStudents()">Print</button>
     </div>
     <p style="font-size:12px;color:#64748b">Excel headings can be B.S. Portal ID, Class, Section, Roll, Name, Sex and 1st Language (Bengali / Santali; blank = Bengali). Admin can also change 1st Language from the dropdown in the table below. Bengali students appear only in the Bengali paper and Santali students only in the Santali paper.</p>
@@ -3281,7 +3305,7 @@ async function loadAttSummary(){
   }catch(e){box.textContent="Could not load: "+e.message}
 }
 
-window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStudents,renderStudents,deleteStudent,setLang,setSex,editProgramme,deleteProgramme,printStudents,loadAttendance,renderAttendance,setAttendance,markAllAttendance,saveAttendance,lockAttendance,unlockAttendance,printAttendance,loadMarks,renderMarks,setMark,saveMarks,lockMarks,unlockMarks,printMarks,generateResult,renderResult,printResult,generateTabulation,renderTabulation,printTabulation,exportTabulation};
+window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStudents,renderStudents,deleteStudent,setLang,setSex,editProgramme,deleteProgramme,printStudents,loadAttendance,renderAttendance,setAttendance,markAllAttendance,saveAttendance,lockAttendance,unlockAttendance,printAttendance,loadMarks,renderMarks,setMark,saveMarks,lockMarks,unlockMarks,printMarks,generateResult,renderResult,printResult,generateTabulation,renderTabulation,printTabulation,exportTabulation};
 })();
 </script>
 
@@ -3706,12 +3730,7 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
       if(!requireAdmin()) return;
       if(!students.length){ alert('Load the Class XI student list first.'); return; }
       try{
-        let recs;
-        if(/\.json$/i.test(file.name)) recs=JSON.parse(await file.text());
-        else{ const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true}); recs=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''}); }
-        const pick=(r,test)=>{ const k=Object.keys(r).find(k=>test(nk(k))); return k?r[k]:''; };
-        const list=recs.map(r=>({name:nameKey(pick(r,k=>k==='name'||k==='nameofstudent'||k==='studentname')),roll:String(pick(r,k=>k==='roll'||k==='rollno')).trim().toUpperCase(),
-          dob:normDob(pick(r,k=>k==='dob'||k==='dateofbirth')),bs:normBs(pick(r,k=>k.includes('siksha')||k==='bsid'))})).filter(r=>r.name);
+        const list=await window.TFHS_readList(file);
         if(!list.length){ alert('No student rows found in this file. Expected columns: Name, Roll, DOB, Banglar Siksha ID.'); return; }
         const byName={}; list.forEach(r=>(byName[r.name]=byName[r.name]||[]).push(r));
         let addDob=0,addBs=0,had=0,none=[],amb=[];
@@ -3873,6 +3892,233 @@ window.MP={loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStuden
   }
   $('rvGo').onclick=go;
   ['rvReg','rvDob','rvBs','rvRoll'].forEach(id=>$(id).addEventListener('keydown',e=>{ if(e.key==='Enter') go(); }));
+})();
+</script>
+
+<script>
+/* ===================== LIST IMPORT (PDF / Excel / CSV / JSON), CLASS X RESULT VIEW, DASHBOARD LINKS ===================== */
+/* parse student-list PDF text items -> [{sec,roll,name,dob,bs}] ; pages = [[{s,x,y,w}]] */
+function parseListPages(pages){
+  const out=[]; let lastHdr=null;
+  pages.forEach(items=>{
+    items=items.filter(i=>i.s&&i.s.trim());
+    const hdrs=[];
+    items.filter(i=>i.s.trim()==='Roll').forEach(r=>{
+      const same=items.filter(i=>Math.abs(i.y-r.y)<3);
+      const nm=same.find(i=>/^Name of/i.test(i.s.trim())), sx=same.find(i=>i.s.trim()==='Sex'), sc=same.find(i=>i.s.trim()==='Sec');
+      if(nm&&sx) hdrs.push({y:r.y,sec:sc||null,roll:r,name:nm,sex:sx});
+    });
+    const anchors=items.filter(i=>/^\d{13,14}$/.test(i.s.trim())).sort((a,b)=>b.y-a.y);
+    anchors.forEach((a,k)=>{
+      const top=k?(anchors[k-1].y+a.y)/2:a.y+40, bot=k<anchors.length-1?(anchors[k+1].y+a.y)/2:a.y-40;
+      let h=hdrs.filter(h=>h.y>a.y).sort((p,q)=>p.y-q.y)[0]||lastHdr; if(!h) return;
+      const band=items.filter(i=>i.y<=Math.min(top,h.y-4)&&i.y>bot);
+      const rollLo=h.sec?h.sec.x+h.sec.w+2:h.roll.x-6, rollHi=h.roll.x+h.roll.w+3, nameHi=h.sex.x+2;
+      const secLo=h.sec?h.sec.x-6:-1;
+      const ord=(a,b)=>(b.y-a.y>2?1:a.y-b.y>2?-1:a.x-b.x);
+      const cx=i=>i.x+i.w/2;
+      const name=band.filter(i=>i.x>=rollHi&&i.x<nameHi&&!/^(male|female|other)$/i.test(i.s.trim())).sort(ord).map(i=>i.s.trim()).join(' ').replace(/\s+/g,' ');
+      const roll=(band.filter(i=>cx(i)>=rollLo&&cx(i)<rollHi&&/^\d+$/.test(i.s.trim()))[0]||{s:''}).s.trim();
+      const sec=h.sec?(band.filter(i=>cx(i)>=secLo&&cx(i)<rollLo&&/^[A-Za-z]{1,2}$/.test(i.s.trim()))[0]||{s:''}).s.trim().toUpperCase():'';
+      const dob=band.filter(i=>i.x>nameHi&&i!==a&&(/^\d{2}-\d{2}-?(\d{4})?$/.test(i.s.trim())||/^\d{4}$/.test(i.s.trim()))).sort(ord).map(i=>i.s.trim()).join('');
+      out.push({sec,roll,name,dob,bs:a.s.trim()});
+    });
+    if(hdrs.length) lastHdr=hdrs[hdrs.length-1];
+  });
+  return out;
+}
+
+
+(function(){
+  const $=id=>document.getElementById(id);
+  const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const nk=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const nameKey=v=>String(v||'').toUpperCase().replace(/[^A-Z ]/g,' ').replace(/\s+/g,' ').trim();
+  const normBs=v=>{ const d=String(v==null?'':v).replace(/\D/g,''); return d?d.padStart(14,'0'):''; };
+  function normDob(v){
+    if(v===null||v===undefined||v==='') return '';
+    if(v instanceof Date&&!isNaN(v)) return String(v.getDate()).padStart(2,'0')+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+v.getFullYear();
+    if(typeof v==='number'&&v>20000&&v<80000){ const d=new Date(Math.round((v-25569)*86400000)); return String(d.getUTCDate()).padStart(2,'0')+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+d.getUTCFullYear(); }
+    const t=String(v).trim(); let m;
+    if((m=/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/.exec(t))) return m[3].padStart(2,'0')+'-'+m[2].padStart(2,'0')+'-'+m[1];
+    if((m=/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/.exec(t))) return m[1].padStart(2,'0')+'-'+m[2].padStart(2,'0')+'-'+m[3];
+    return '';
+  }
+
+  /* ---- shared reader: returns [{name(normalised),roll,sec,dob(DD-MM-YYYY),bs(14 digits)}] ---- */
+  async function loadPdfJs(){
+    if(window.pdfjsLib) return;
+    await new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; sc.onload=res; sc.onerror=()=>rej(new Error('Could not load the PDF reader. Check your internet connection.')); document.head.appendChild(sc); });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+  async function readPdf(file){
+    await loadPdfJs();
+    const doc=await window.pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise, pages=[];
+    for(let p=1;p<=doc.numPages;p++){ const tc=await (await doc.getPage(p)).getTextContent(); pages.push(tc.items.map(i=>({s:i.str,x:i.transform[4],y:i.transform[5],w:i.width}))); }
+    return parseListPages(pages).map(r=>({name:r.name,roll:r.roll,sec:r.sec,dob:r.dob,bs:r.bs}));
+  }
+  window.TFHS_readList=async function(file){
+    let recs;
+    if(/\.pdf$/i.test(file.name)) recs=await readPdf(file);
+    else if(/\.json$/i.test(file.name)) recs=JSON.parse(await file.text());
+    else{ const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true}); recs=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''}); }
+    const pick=(r,test)=>{ const k=Object.keys(r).find(k=>test(nk(k))); return k?r[k]:''; };
+    const list=recs.map(r=>({
+      name:nameKey(pick(r,k=>k==='name'||k==='nameofstudent'||k==='studentname')),
+      roll:String(pick(r,k=>k==='roll'||k==='rollno')).trim().toUpperCase(),
+      sec:String(pick(r,k=>k==='sec'||k==='section')).trim().toUpperCase(),
+      dob:normDob(pick(r,k=>k==='dob'||k==='dateofbirth')),
+      bs:normBs(pick(r,k=>k.includes('siksha')||k==='bsid'||k==='bs'))
+    })).filter(r=>r.name);
+    if(!list.length) throw new Error('No student rows found. Use the "LIST OF STUDENTS" PDF (or a file with Name, Roll, DOB, Banglar Siksha ID columns).');
+    return list;
+  };
+
+  /* ---- Class X helpers (same key rules as the Class X module) ---- */
+  const pickX=(s,keys)=>{ const ks=Object.keys(s||{}); for(const k of keys){ const h=ks.find(x=>nk(x)===nk(k)); if(h&&String(s[h]??'').trim()!=='') return s[h]; } return ''; };
+  const regX=s=>pickX(s,["B.S. Portal ID","BS Portal ID","Portal ID","Reg No","Registration No","Registration","RegNo","Registration Number"]);
+  const rollX=s=>pickX(s,["Roll","Roll No","Roll Number"]);
+  const nameX=s=>pickX(s,["Name","Student Name","Candidate Name"]);
+  const secX=s=>String(pickX(s,["Section","Sec","Section Name"])||'A').trim().toUpperCase();
+  const dobX=s=>normDob(pickX(s,["DOB","Date of Birth","Date Of Birth"]));
+  const keyX=s=>String(regX(s)||rollX(s)||nameX(s)).trim();
+  function langX(s){
+    const v=nk(pickX(s,["1st Language","First Language","1st Lang","Language","Medium","L1"]));
+    if(['sant','santali','santhali'].includes(v)) return 'SANT';
+    const keys=Object.keys(s||{});
+    if(keys.filter(k=>/^s\d+$/i.test(nk(k))).some(k=>['SANT','SANTALI','SANTHALI'].includes(String(s[k]).toUpperCase().replace(/\s+/g,'')))) return 'SANT';
+    return 'BNGA';
+  }
+
+  /* ---- Class X: import DOB from list ---- */
+  (function(){
+    const inp=$('mp_dobFile'); if(!inp) return;
+    inp.onchange=async()=>{
+      const file=inp.files[0]; inp.value=''; if(!file) return;
+      if(!requireAdmin()) return;
+      const st=MP.getStudents();
+      if(!st.length){ alert('Load the Class X student list first.'); return; }
+      try{
+        const list=await TFHS_readList(file);
+        const byName={}; list.forEach(r=>(byName[r.name]=byName[r.name]||[]).push(r));
+        let had=0; const none=[],amb=[],todo=[];
+        st.forEach(x=>{
+          if(dobX(x)){ had++; return; }
+          let c=byName[nameKey(nameX(x))]||[];
+          if(c.length>1){ const r=String(rollX(x)).trim().toUpperCase(); const c2=c.filter(y=>y.roll===r); if(c2.length) c=c2; }
+          if(c.length>1){ const sc=secX(x); const c3=c.filter(y=>y.sec===sc); if(c3.length) c=c3; }
+          if(!c.length){ none.push(nameX(x)); return; }
+          if(c.length>1){ amb.push(nameX(x)); return; }
+          if(c[0].dob) todo.push([x,c[0].dob]); else none.push(nameX(x));
+        });
+        const m='Class X students in portal: '+st.length+'\nAlready have DOB: '+had+'\nDOB to be added: '+todo.length+
+          '\nNot found / no DOB in file: '+none.length+(none.length?' ('+none.slice(0,10).join(', ')+(none.length>10?', …':'')+')':'')+
+          '\nAmbiguous (same name): '+amb.length+(amb.length?' ('+amb.slice(0,10).join(', ')+')':'')+'\n\nExisting DOB values are NOT changed. Save these additions now?';
+        if(!todo.length){ alert(m.split('\n\nExisting')[0]+'\n\nNothing to add.'); return; }
+        if(!confirm(m)) return;
+        todo.forEach(([x,d])=>{ x['DOB']=d; });
+        await MP.saveStudents(); MP.renderStudents(); statusUpd();
+      }catch(e){ alert('Could not read the file: '+e.message); }
+    };
+  })();
+
+  /* ---- Class X result view (?m=resultx&sub=*|CODES) ---- */
+  const P=new URLSearchParams(location.search);
+  const modeX=(P.get('m')||'').toLowerCase()==='resultx';
+  if(modeX){
+    document.body.classList.add('result-only');
+    document.title='Class X Result — TFHS';
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    $('rvx_view').classList.add('active');
+    const wanted=(P.get('sub')||'*').split(',').map(x=>x.trim().toUpperCase()).filter(Boolean), anySub=wanted.includes('*');
+    const msg=(t)=>{ const m=$('rvxMsg'); m.style.display=t?'block':'none'; m.className='lockbox'; m.textContent=t||''; };
+    const DEF={BNGA:'BENGALI',SANT:'SANTHALI',ENGB:'ENGLISH',HIST:'HISTORY',GEGR:'GEOGRAPHY',MATH:'MATHEMATICS',PHYS:'PHYSICAL SCIENCE',BIOS:'LIFE SCIENCE'};
+    let prog=JSON.parse(JSON.stringify(DEF)), stuX=[], loaded=false;
+    const codes=()=>(anySub?Object.keys(prog):wanted).filter(c=>prog[c]);
+    function fillSub(){
+      const sel=$('rvxSub'), cur=sel.value, l=codes();
+      sel.innerHTML=(l.length>1||anySub?'<option value="*">All subjects</option>':'')+l.map(c=>'<option value="'+esc(c)+'">'+esc(prog[c])+'</option>').join('');
+      if(cur&&[...sel.options].some(o=>o.value===cur)) sel.value=cur;
+    }
+    fillSub();
+    async function ready(){
+      for(let i=0;i<60&&!auth.currentUser;i++) await new Promise(r=>setTimeout(r,250));
+      if(!auth.currentUser) throw new Error('Could not connect. Please check your internet and try again.');
+      if(loaded) return;
+      const [a,c]=await Promise.all([db.collection('mpStudents').doc('2027').get(),db.collection('mpStudents').doc('mpConfig').get().catch(()=>null)]);
+      stuX=a.exists&&Array.isArray(a.data().students)?a.data().students:[];
+      if(c&&c.exists&&c.data().programme&&Object.keys(c.data().programme).length){ const o={}; const pg=c.data().programme; Object.keys(pg).forEach(k=>o[k]=pg[k].name); prog=o; }
+      loaded=true; fillSub();
+    }
+    ready().catch(e=>msg(e.message));
+    const show=v=>v===undefined?'<span style="color:#94a3b8">Awaited</span>':(v==='AB'?'<b style="color:#b91c1c">AB</b>':v);
+    async function go(){
+      const q={bs:normBs($('rvxBs').value),dob:normDob($('rvxDob').value),roll:$('rvxRoll').value.trim().toUpperCase(),sec:$('rvxSec').value.trim().toUpperCase()};
+      if($('rvxDob').value&&!q.dob){ msg('Date of Birth is not valid.'); return; }
+      if([q.bs,q.dob,q.roll].filter(Boolean).length<2){ msg('Please fill in at least any two of: B.S. Portal ID, Date of Birth, Roll No.'); return; }
+      $('rvxOut').innerHTML=''; msg('Loading…'); $('rvxGo').disabled=true;
+      try{
+        await ready();
+        const hits=stuX.filter(s=>(!q.bs||normBs(regX(s))===q.bs)&&(!q.dob||dobX(s)===q.dob)&&(!q.roll||String(rollX(s)).trim().toUpperCase()===q.roll)&&(!q.sec||secX(s)===q.sec));
+        if(!hits.length){ msg('No matching record found. Please check the details you entered. If your Date of Birth is not on record, contact the school.'); return; }
+        if(hits.length>1){ msg('More than one student matches. Please fill in one more detail (for example Section).'); return; }
+        const st=hits[0], lang=langX(st), choice=$('rvxSub').value;
+        const pool=(choice==='*'?codes():[choice]).filter(c=>!((c==='BNGA'||c==='SANT')&&c!==lang));
+        if(!pool.length){ msg('You are not enrolled in the selected subject.'); return; }
+        const snaps=await Promise.all(pool.map(c=>db.collection('mpMarks').doc(c+'_MP-SE-2027').get()));
+        const k=keyX(st); let pending=0, grand=0, fails=0, absn=0;
+        const rows=pool.map((c,i)=>{
+          const d=snaps[i], ok=d.exists&&d.data().locked;
+          const r=ok?(d.data().rows||[]).find(x=>keyX(x.student)===k):null;
+          if(!r){ pending++; return '<tr><td style="text-align:left"><b>'+esc(prog[c])+'</b></td><td>'+show(undefined)+'</td><td>'+show(undefined)+'</td><td>—</td><td><span style="color:#94a3b8">Awaited</span></td></tr>'; }
+          if(r.absent){ absn++; return '<tr><td style="text-align:left"><b>'+esc(prog[c])+'</b></td><td>'+show('AB')+'</td><td>'+show('AB')+'</td><td>—</td><td><span class="badge fail">ABSENT</span></td></tr>'; }
+          const w=Number(r.written)||0, f=Number(r.ife)||0, t=w+f, pass=t>=30; grand+=t; if(!pass) fails++;
+          return '<tr><td style="text-align:left"><b>'+esc(prog[c])+'</b></td><td>'+w+'</td><td>'+f+'</td><td><b>'+t+'</b> / 100</td><td><span class="badge '+(pass?'pass':'fail')+'">'+(pass?'PASS':'FAIL')+'</span></td></tr>';
+        }).join('');
+        const done=pool.length-pending;
+        const overall=pending?'<span style="color:#94a3b8">Awaited</span>':(absn?'<span class="badge fail">ABSENT IN '+absn+' SUBJECT(S)</span>':'<span class="badge '+(fails?'fail':'pass')+'">'+(fails?'FAIL':'PASS')+'</span>');
+        $('rvxOut').innerHTML='<div class="panel"><div class="rv-who"><b>'+esc(nameX(st))+'</b><br>B.S. Portal ID: '+esc(normBs(regX(st)))+' &nbsp;|&nbsp; Class X-'+esc(secX(st))+' &nbsp;|&nbsp; Roll: '+esc(rollX(st))+'</div>'+
+          '<div class="tablewrap" style="margin-top:0"><table style="min-width:420px"><thead><tr><th>Subject</th><th>Written / 90</th><th>IFE / 10</th><th>Total</th><th>Result</th></tr></thead><tbody>'+rows+
+          (choice==='*'&&pool.length>1?'<tr style="background:#f1f5f9;font-weight:700"><td style="text-align:left">GRAND TOTAL ('+done+' of '+pool.length+' subjects)</td><td></td><td></td><td>'+grand+' / '+(done*100)+'</td><td>'+overall+'</td></tr>':'')+
+          '</tbody></table></div><div class="rv-note">AB = Absent. "Awaited" = marks not yet finalised by the school. Only finalised (locked) marks are shown. Pass mark: 30 out of 100 in each subject. For official results refer to the school.</div>'+
+          '<div class="toolbar noprint" style="margin-top:10px"><button class="btn secondary" onclick="window.print()">Print</button></div></div>';
+        msg(pending?'Some subjects are still awaiting finalised marks.':'');
+      }catch(e){ msg('Could not load result: '+e.message); }
+      finally{ $('rvxGo').disabled=false; }
+    }
+    $('rvxGo').onclick=go;
+    ['rvxBs','rvxDob','rvxRoll','rvxSec'].forEach(id=>$(id).addEventListener('keydown',e=>{ if(e.key==='Enter') go(); }));
+  }
+
+  /* ---- Admin dashboard front: the two result links ---- */
+  const base=location.origin+location.pathname;
+  const LINKS=[['🎓 Class XI result link',base+'?m=result&sub=*','Class XI','রেজিস্ট্রেশন নম্বর, জন্মতারিখ, Banglar Siksha ID বা রোল নম্বর — যেকোনো অন্তত দুটি'],
+               ['🎓 Class X (MP SE 2027) result link',base+'?m=resultx&sub=*','Class X','B.S. Portal ID, জন্মতারিখ বা রোল নম্বর — যেকোনো অন্তত দুটি']];
+  function statusUpd(){
+    let xi=0,x10=0,xiN=0,xN=0;
+    try{ xiN=students.length; students.forEach(s=>{ if(Object.keys(s).some(k=>['dob','dateofbirth'].includes(nk(k))&&normDob(s[k]))) xi++; }); }catch(e){}
+    try{ const m=MP.getStudents(); xN=m.length; m.forEach(s=>{ if(dobX(s)) x10++; }); }catch(e){}
+    document.querySelectorAll('.rv-dobstat').forEach(el=>{ el.innerHTML='Date of Birth on record — Class XI: <b>'+xi+' / '+xiN+'</b> &nbsp;|&nbsp; Class X: <b>'+x10+' / '+xN+'</b> &nbsp;(use <b>📅 Import DOB</b> in each Students tab to add the rest from the list PDF)'; });
+  }
+  function mkPanel(){
+    const d=document.createElement('div'); d.className='panel rv-dashlinks'; d.style.display='none';
+    d.innerHTML='<h3 style="margin:0 0 6px">📎 Student Result Links</h3><div class="subtitle" style="margin-bottom:8px">Send these two links to students. Each opens only the result window; students must enter at least two details. Only locked marks are shown.</div>'+
+      LINKS.map((l,i)=>'<div class="toolbar" style="margin-bottom:8px"><div style="min-width:210px;font-weight:700">'+l[0]+'</div><input class="ml-url" style="flex:1;min-width:240px" readonly value="'+esc(l[1])+'"><button class="btn light rl-c" data-i="'+i+'">Copy</button> <button class="btn success rl-w" data-i="'+i+'">WhatsApp</button> <a class="btn light" style="text-decoration:none;display:inline-block" target="_blank" rel="noopener" href="'+esc(l[1])+'">Open</a></div>').join('')+
+      '<div class="rv-note rv-dobstat"></div>';
+    d.querySelectorAll('.rl-c').forEach(b=>b.onclick=async()=>{ const u=LINKS[b.dataset.i][1]; try{await navigator.clipboard.writeText(u); b.textContent='Copied ✔'; setTimeout(()=>b.textContent='Copy',1500);}catch(e){prompt('Copy link:',u);} });
+    d.querySelectorAll('.rl-w').forEach(b=>b.onclick=()=>{ const l=LINKS[b.dataset.i]; const m='নমস্কার,\n\nTFHS '+l[2]+'-এর রেজাল্ট দেখতে নিচের লিঙ্কটি খুলুন। '+l[3]+' লিখে বিষয় বেছে "View Result" চাপুন।\n\nলিঙ্ক: '+l[1]+'\n\nধন্যবাদ।\nপ্রধান শিক্ষক, Taldangra Fulmati High School [H.S.]'; window.open('https://wa.me/?text='+encodeURIComponent(m),'_blank'); });
+    return d;
+  }
+  ['dashboard','mp_dashboard'].forEach(id=>{ const v=$(id); if(!v) return; const sub=v.querySelector('.subtitle'); (sub||v.firstChild).insertAdjacentElement('afterend',mkPanel()); });
+  const _a=applyRoleUI;
+  applyRoleUI=function(){
+    _a.apply(this,arguments);
+    document.querySelectorAll('.rv-dashlinks').forEach(p=>p.style.display=isAdmin()?'block':'none');
+    const b=$('mp_importDobBtn'); if(b) b.style.display=isAdmin()?'inline-block':'none';
+    statusUpd();
+  };
+  applyRoleUI();
+  let n=0; const t=setInterval(()=>{ statusUpd(); if(++n>20) clearInterval(t); },2000);
 })();
 </script>
 </body>
