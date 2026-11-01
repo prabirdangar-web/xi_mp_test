@@ -3719,7 +3719,7 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
   /* B.S. Portal ID is 14 digits; shorter entries (leading 0 dropped) are padded on the left with zeros */
   const normBs=v=>{ const d=String(v==null?'':v).replace(/\D/g,''); return d?d.padStart(14,'0'):''; };
   const getBs=st=>normBs(fieldBy(st,k=>k.includes('siksha')||k==='bsid'||k==='bsportalid'));
-  const getRoll=st=>String(fieldBy(st,k=>k==='roll'||k==='rollno'||k==='rollnumber')||'').trim().toUpperCase();
+  const getRoll=st=>String(fieldBy(st,k=>k==='roll'||k==='rollno'||k==='rollnumber')||fieldBy(st,k=>k==='sl'||k==='slno'||k==='serial')||'').trim().toUpperCase();
   const nameKey=v=>String(v||'').toUpperCase().replace(/[^A-Z ]/g,' ').replace(/\s+/g,' ').trim();
 
   /* ---------- Admin: add DOB / Banglar Siksha ID from the PDF-derived list (only where missing) ---------- */
@@ -3898,7 +3898,29 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
 <script>
 /* ===================== LIST IMPORT (PDF / Excel / CSV / JSON), CLASS X RESULT VIEW, DASHBOARD LINKS ===================== */
 /* parse student-list PDF text items -> [{sec,roll,name,dob,bs}] ; pages = [[{s,x,y,w}]] */
+/* NEW LAYOUT: "SL | Banglar Siksha ID | Name | DOB | SEX | Category" (SL = XIA1, XIB25 ...) -> read line by line */
+function parseListPagesSL(pages){
+  const out=[];
+  pages.forEach(items=>{
+    items=items.filter(i=>i.s&&i.s.trim());
+    const rows=[];
+    items.slice().sort((a,b)=>b.y-a.y).forEach(i=>{
+      let r=rows.find(r=>Math.abs(r.y-i.y)<9);
+      if(!r){ r={y:i.y,its:[]}; rows.push(r); }
+      r.its.push(i);
+    });
+    rows.forEach(r=>{
+      const line=r.its.sort((a,b)=>a.x-b.x).map(i=>i.s.trim()).join(' ').replace(/\s+/g,' ').trim();
+      const m=/^(XI[A-Z]?)\s*(\d+)\s+(\d{13,14})\s+(.+?)\s+(\d{1,2}-\d{1,2}-\d{4})\s+(BOYS|GIRLS|MALE|FEMALE)\b/i.exec(line);
+      if(!m) return;
+      out.push({sec:m[1].toUpperCase().replace(/^XI/,''),roll:(m[1]+m[2]).toUpperCase(),name:m[4].trim(),dob:m[5],bs:m[3]});
+    });
+  });
+  return out;
+}
 function parseListPages(pages){
+  const sl=parseListPagesSL(pages);
+  if(sl.length) return sl;
   const out=[]; let lastHdr=null;
   pages.forEach(items=>{
     items=items.filter(i=>i.s&&i.s.trim());
@@ -3965,7 +3987,7 @@ function parseListPages(pages){
     const pick=(r,test)=>{ const k=Object.keys(r).find(k=>test(nk(k))); return k?r[k]:''; };
     const list=recs.map(r=>({
       name:nameKey(pick(r,k=>k==='name'||k==='nameofstudent'||k==='studentname')),
-      roll:String(pick(r,k=>k==='roll'||k==='rollno')).trim().toUpperCase(),
+      roll:String(pick(r,k=>k==='roll'||k==='rollno')||pick(r,k=>k==='sl'||k==='slno')).trim().toUpperCase(),
       sec:String(pick(r,k=>k==='sec'||k==='section')).trim().toUpperCase(),
       dob:normDob(pick(r,k=>k==='dob'||k==='dateofbirth')),
       bs:normBs(pick(r,k=>k.includes('siksha')||k==='bsid'||k==='bs'))
