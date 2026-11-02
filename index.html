@@ -4143,5 +4143,285 @@ function parseListPages(pages){
   let n=0; const t=setInterval(()=>{ statusUpd(); if(++n>20) clearInterval(t); },2000);
 })();
 </script>
+<script>
+/* ===================== CERTIFICATE PORTAL -> EXAM PORTAL IMPORT (Class XI + Class X) =====================
+   Source  : student data of the TFHS certificate portal (CSV / Excel / JSON export, or Firebase certDb)
+   Match   : B.S. Portal ID + Name + Father's name (safe tiers, nothing is guessed silently)
+   Fills   : Registration No (and, only where missing, BS ID, DOB, father, mother, mobile, caste, sex, roll, section) */
+(function(){
+  const $=id=>document.getElementById(id);
+  const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const nk=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const nm=v=>String(v||'').toUpperCase().replace(/[^A-Z ]/g,' ').replace(/\s+/g,' ').trim();
+  const bsKey=v=>{ const d=String(v==null?'':v).replace(/\D/g,'').replace(/^0+/,''); return d.length>=8?d:''; };
+  const bs14=v=>{ const d=String(v==null?'':v).replace(/\D/g,'').replace(/^0+/,''); return d?d.padStart(14,'0'):''; };
+  function dobN(v){
+    if(v===null||v===undefined||v==='') return '';
+    if(v instanceof Date&&!isNaN(v)) return String(v.getDate()).padStart(2,'0')+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+v.getFullYear();
+    if(typeof v==='number'&&v>20000&&v<80000){ const d=new Date(Math.round((v-25569)*86400000)); return String(d.getUTCDate()).padStart(2,'0')+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+d.getUTCFullYear(); }
+    const t=String(v).trim(); let m;
+    if((m=/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/.exec(t))) return m[3].padStart(2,'0')+'-'+m[2].padStart(2,'0')+'-'+m[1];
+    if((m=/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/.exec(t))) return m[1].padStart(2,'0')+'-'+m[2].padStart(2,'0')+'-'+m[3];
+    return '';
+  }
+  const clsN=v=>{ const t=String(v||'').toUpperCase().replace(/CLASS|STD|STANDARD|[^A-Z0-9]/g,''); return ({'9':'IX','10':'X','11':'XI','12':'XII'})[t]||t; };
+
+  /* ---- field detection by (normalised) column name ---- */
+  const T={
+    bs:k=>k.includes('siksha')||/^bs(p|s)?(portal|student)?(id|code)?$/.test(k)||k==='portalid'||k==='studentcode'||k==='studentid'||k.includes('bspid'),
+    reg:k=>!k.includes('siksha')&&(/^(registrationno|registrationnumber|registration|regno|regdno|regd|reg|hsregno|wbchseregno|wbchseregistrationno)$/.test(k)||k.startsWith('registrationno')||k.startsWith('regno')),
+    name:k=>['name','studentname','nameofstudent','nameofthestudent','candidatename','fullname'].includes(k),
+    father:k=>k.includes('father')||k.includes('guardian'),
+    mother:k=>k.includes('mother'),
+    dob:k=>['dob','dateofbirth','birthdate','dateofbirthddmmyyyy'].includes(k),
+    roll:k=>['roll','rollno','rollnumber'].includes(k),
+    sec:k=>['sec','section','sectionname'].includes(k),
+    cls:k=>['class','cls','classname','currentclass','std','standard','classsec'].includes(k),
+    sex:k=>['sex','gender'].includes(k),
+    caste:k=>['caste','category','socialcategory','castecategory'].includes(k),
+    mobile:k=>['mobile','mobileno','mobilenumber','phone','phoneno','contact','contactno','mobno','mobile2','mob2'].includes(k)
+  };
+  function pickKey(o,test){ return Object.keys(o||{}).find(k=>{ const v=o[k]; return test(nk(k))&&v!==''&&v!==null&&v!==undefined&&typeof v!=='object'; }); }
+  function pickVal(o,test){ const k=pickKey(o,test); return k===undefined?'':o[k]; }
+  function extract(o){
+    const r={bs:bsKey(pickVal(o,T.bs)),name:nm(pickVal(o,T.name)),father:nm(pickVal(o,T.father)),mother:nm(pickVal(o,T.mother)),
+      reg:String(pickVal(o,T.reg)).trim(),dob:dobN(pickVal(o,T.dob)),roll:String(pickVal(o,T.roll)).trim(),sec:String(pickVal(o,T.sec)).trim().toUpperCase(),
+      cls:String(pickVal(o,T.cls)).trim(),sex:String(pickVal(o,T.sex)).trim(),caste:String(pickVal(o,T.caste)).trim(),mobile:String(pickVal(o,T.mobile)).replace(/\D/g,'').slice(-10)};
+    r.bsFull=bs14(pickVal(o,T.bs)); r.fatherRaw=String(pickVal(o,T.father)).trim(); r.motherRaw=String(pickVal(o,T.mother)).trim(); r.nameRaw=String(pickVal(o,T.name)).trim();
+    return r;
+  }
+  /* find every array / map of student-like objects inside any JSON / Firestore data */
+  function collect(x,out,depth){
+    depth=depth||0; out=out||[]; if(depth>5||x===null||typeof x!=='object') return out;
+    const looksStudent=o=>o&&typeof o==='object'&&!Array.isArray(o)&&Object.keys(o).some(k=>T.name(nk(k))&&String(o[k]||'').trim());
+    if(Array.isArray(x)){ x.forEach(e=>{ if(looksStudent(e)) out.push(e); else collect(e,out,depth+1); }); return out; }
+    if(looksStudent(x)){ out.push(x); return out; }
+    Object.keys(x).forEach(k=>collect(x[k],out,depth+1));
+    return out;
+  }
+  function lev(a,b){ const m=a.length,n=b.length; if(!m)return n; if(!n)return m; let p=[...Array(n+1).keys()]; for(let i=1;i<=m;i++){ const c=[i]; for(let j=1;j<=n;j++) c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1)); p=c; } return p[n]; }
+  const tokEq=(a,b)=>a===b||(a.length>=5&&b.length>=5&&lev(a,b)<=1);
+  function sim(a,b){
+    if(!a||!b) return null; if(a===b) return 1; if(a.replace(/ /g,'')===b.replace(/ /g,'')) return 1;
+    const ta=a.split(' '),tb=b.split(' '); let inter=0; const used=new Set();
+    ta.forEach(x=>{ const j=tb.findIndex((y,i)=>!used.has(i)&&tokEq(x,y)); if(j>=0){ used.add(j); inter++; } });
+    const mn=Math.min(ta.length,tb.length), un=ta.length+tb.length-inter;
+    if(inter===mn&&mn>=2) return 0.9;       /* "ARUP DEY" inside "ARUP DEY MODAK" */
+    return inter/un;
+  }
+  /* items=[{name,father,bs}] (portal), recs=[extract()] (source) -> [{status,how,rec,n,f}] */
+  function match(items,recs){
+    const byBs={},byName={};
+    recs.forEach(r=>{ if(r.bs) (byBs[r.bs]=byBs[r.bs]||[]).push(r); if(r.name) (byName[r.name]=byName[r.name]||[]).push(r); });
+    return items.map(it=>{
+      const name=nm(it.name),father=nm(it.father),bs=bsKey(it.bs);
+      const score=r=>({r,n:sim(name,r.name),f:sim(father,r.father)});
+      const rank=x=>(x.n||0)+(x.f||0)+(x.r.reg?0.01:0);
+      if(bs&&byBs[bs]){
+        const b=byBs[bs].map(score).sort((p,q)=>rank(q)-rank(p))[0];
+        const how='BS ID'+(b.n!==null&&b.n>=0.8?' + Name':'')+(b.f!==null&&b.f>=0.5?' + Father':'');
+        if(b.n!==null&&b.n>=0.8&&(b.f===null||b.f>=0.5)) return {status:'OK',how,rec:b.r,n:b.n,f:b.f};
+        if((b.n!==null&&b.n>=0.5)||(b.f!==null&&b.f>=0.8)) return {status:'REVIEW',how:'BS ID matches, name/father differs',rec:b.r,n:b.n,f:b.f};
+        return {status:'CONFLICT',how:'BS ID found but belongs to a different name',rec:b.r,n:b.n,f:b.f};
+      }
+      let c=byName[name]||[];
+      if(!c.length&&name) c=recs.filter(r=>r.name&&sim(name,r.name)>=0.9);
+      if(!c.length) return {status:'NOTFOUND',how:bs?'BS ID and name not in source':'name not in source'};
+      let sc=c.map(score);
+      if(father){ const w=sc.filter(x=>x.f!==null&&x.f>=0.6); if(w.length) sc=w; else if(sc.some(x=>x.f!==null)) return {status:'NOTFOUND',how:'name found, father differs'}; }
+      const fatherUsed=father&&sc.every(x=>x.f!==null);
+      if(sc.length>1){ const regs=new Set(sc.map(x=>x.r.reg||x.r.bs)); if(regs.size>1) return {status:'AMBIG',how:sc.length+' students share this name'+(father?' & father':''),rec:null}; }
+      const b=sc[0];
+      if(!bs&&fatherUsed) return {status:'OK',how:'Name + Father (no BS ID in portal)',rec:b.r,n:b.n,f:b.f};
+      return {status:'REVIEW',how:bs?'Name'+(fatherUsed?' + Father':'')+' only (BS ID differs)':'Name only',rec:b.r,n:b.n,f:b.f};
+    });
+  }
+  window.CertImportCore={extract,collect,match,sim,bsKey,nm,dobN,clsN};
+
+  /* ===================== UI ===================== */
+  const MODES={
+    XI:{label:'Class XI',cls:'XI',
+      list:()=>students,
+      name:s=>String(getStudentName(s)||''),
+      bs:s=>{ const k=Object.keys(s).find(k=>T.bs(nk(k))&&s[k]); return k?s[k]:''; },
+      father:s=>String(pickVal(s,T.father)||''),
+      rollTxt:s=>String(getStudentRoll(s)||''), secTxt:s=>String(pickVal(s,T.sec)||''),
+      bsKeyName:'Banglar Siksha ID',
+      save:async()=>{ await persistStudents(); }},
+    X:{label:'Class X',cls:'X',
+      list:()=>MP.getStudents(),
+      name:s=>String(pickVal(s,k=>['name','studentname','candidatename'].includes(k))||''),
+      bs:s=>{ const k=Object.keys(s).find(k=>T.bs(nk(k))&&s[k]); return k?s[k]:''; },
+      father:s=>String(pickVal(s,T.father)||''),
+      rollTxt:s=>String(pickVal(s,T.roll)||''), secTxt:s=>String(pickVal(s,T.sec)||''),
+      bsKeyName:'B.S. Portal ID',
+      save:async()=>{ await MP.saveStudents(); MP.renderStudents(); }}
+  };
+  let ST=null;   /* current state {mode, recs, rows} */
+
+  function overlay(){
+    let o=$('certImpOv'); if(o) o.remove();
+    o=document.createElement('div'); o.id='certImpOv';
+    o.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding:18px;overflow:auto';
+    o.innerHTML='<div id="certImpBox" style="background:#fff;border-radius:12px;max-width:1150px;width:100%;padding:16px 18px;box-shadow:0 10px 40px rgba(0,0,0,.3)"></div>';
+    document.body.appendChild(o); return $('certImpBox');
+  }
+  const close=()=>{ const o=$('certImpOv'); if(o) o.remove(); ST=null; };
+
+  function step1(mode){
+    if(typeof requireAdmin==='function'&&!requireAdmin()) return;
+    const M=MODES[mode], list=M.list();
+    if(!list.length){ alert('Load the '+M.label+' student list first.'); return; }
+    ST={mode,recs:[],rows:[]};
+    const b=overlay();
+    b.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">🔗 Import from Certificate Portal — '+M.label+'</h3><button class="btn secondary" id="ciX">✕ Close</button></div>'+
+      '<p style="font-size:13px;color:#475569">Students in this portal: <b>'+list.length+'</b>. Each one is matched with the certificate portal data by <b>B.S. Portal ID + Name + Father\'s name</b>, and the <b>Registration No.</b> is filled in. You see the full match list before anything is saved.</p>'+
+      '<div class="toolbar" style="gap:10px;align-items:flex-end;flex-wrap:wrap"><div class="field"><label>Option 1 — file exported from the certificate portal (Excel / CSV / JSON)</label><input type="file" id="ciFile" accept=".xlsx,.xls,.xlsm,.csv,.json"></div>'+
+      '<div class="field"><label>Option 2</label><button class="btn" id="ciFb">☁ Load from Firebase (certDb)</button></div></div>'+
+      '<div id="ciMsg" style="font-size:13px;margin-top:8px;color:#334155"></div>';
+    $('ciX').onclick=close;
+    $('ciFile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; try{ msg('Reading '+f.name+' …'); await loadFile(f); gotRecs(); }catch(err){ msg('✖ '+err.message,true); } };
+    $('ciFb').onclick=async()=>{ try{ msg('Reading Firebase certDb …'); await loadFirebase(); gotRecs(); }catch(err){ msg('✖ '+err.message,true); } };
+  }
+  const msg=(t,bad)=>{ const m=$('ciMsg'); if(m){ m.style.color=bad?'#b91c1c':'#334155'; m.textContent=t; } };
+
+  async function loadFile(file){
+    let raw=[];
+    if(/\.json$/i.test(file.name)){ raw=collect(JSON.parse(await file.text())); }
+    else if(/\.pdf$/i.test(file.name)){ throw new Error('PDF is not supported here — export Excel / CSV from the certificate portal (Student Reports → EXPORT CSV).'); }
+    else{
+      const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
+      wb.SheetNames.forEach(n=>{ XLSX.utils.sheet_to_json(wb.Sheets[n],{defval:''}).forEach(r=>raw.push(r)); });
+    }
+    ST.raw=raw; ST.srcName=file.name;
+  }
+  async function loadFirebase(){
+    const snap=await db.collection('certDb').get();
+    if(snap.empty) throw new Error('Collection "certDb" is empty or not readable. Use Option 1 (file export) instead.');
+    const raw=[]; snap.forEach(d=>collect(d.data(),raw)); 
+    if(!raw.length) throw new Error('certDb was read ('+snap.size+' documents) but no student records were recognised in it. Use Option 1 (file export) instead.');
+    ST.raw=raw; ST.srcName='Firebase certDb ('+snap.size+' documents)';
+  }
+  function gotRecs(){
+    const M=MODES[ST.mode];
+    let recs=ST.raw.map(extract).filter(r=>r.name);
+    const withCls=recs.filter(r=>r.cls);
+    let note='';
+    if(withCls.length){
+      const keep=recs.filter(r=>!r.cls||clsN(r.cls)===M.cls||(M.cls==='XI'&&/^XI[ABC]$/.test(clsN(r.cls)))||(M.cls==='X'&&/^X[ABC]$/.test(clsN(r.cls))));
+      note=' · class filter '+M.cls+': '+keep.length+' of '+recs.length; recs=keep; }
+    const d={reg:recs.filter(r=>r.reg).length,bs:recs.filter(r=>r.bs).length,father:recs.filter(r=>r.father).length};
+    ST.recs=recs;
+    if(!recs.length){ msg('✖ No '+M.label+' student rows found in the source. Columns needed: Name, B.S. Portal ID, Father\'s Name, Registration No.',true); return; }
+    ST.info=ST.srcName+' — '+recs.length+' students'+note+' · with Reg No: '+d.reg+' · with BS ID: '+d.bs+' · with father: '+d.father;
+    runMatch();
+  }
+  function runMatch(){
+    const M=MODES[ST.mode], list=M.list();
+    const items=list.map(s=>({name:M.name(s),father:M.father(s),bs:M.bs(s)}));
+    const res=match(items,ST.recs);
+    ST.rows=res.map((r,i)=>({i,s:list[i],it:items[i],...r,pick:r.status==='OK'}));
+    renderPreview();
+  }
+  const COLORS={OK:'#16a34a',REVIEW:'#d97706',CONFLICT:'#dc2626',AMBIG:'#dc2626',NOTFOUND:'#64748b'};
+  function regKeyOf(s){ return Object.keys(s).find(k=>T.reg(nk(k))); }
+  function renderPreview(){
+    const M=MODES[ST.mode], cnt={OK:0,REVIEW:0,CONFLICT:0,AMBIG:0,NOTFOUND:0};
+    ST.rows.forEach(r=>cnt[r.status]++);
+    const noReg=ST.recs.every(r=>!r.reg);
+    const b=$('certImpBox');
+    b.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">🔗 Match preview — '+M.label+'</h3><button class="btn secondary" id="ciX">✕ Close</button></div>'+
+      '<div style="font-size:12px;color:#475569;margin:4px 0">'+esc(ST.info)+'</div>'+
+      (noReg?'<div style="background:#fef2f2;color:#991b1b;padding:8px;border-radius:8px;margin:6px 0;font-size:13px">⚠ The source has <b>no Registration No. column</b> (looked for: Registration No / Reg No / Registration). Only the other fields below can be filled.</div>':'')+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">'+Object.keys(cnt).map(k=>'<span style="background:'+COLORS[k]+';color:#fff;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700">'+k+': '+cnt[k]+'</span>').join('')+'</div>'+
+      '<div style="font-size:12.5px;margin:6px 0;display:flex;gap:14px;flex-wrap:wrap;align-items:center"><b>Fill:</b>'+
+        [['reg','Registration No.',1],['bs','BS ID (if missing)',1],['dob','DOB (if missing)',1],['father','Father (if missing)',1],['mother','Mother (if missing)',0],['mobile','Mobile (if missing)',0],['caste','Caste (if missing)',0],['sex','Sex (if missing)',0],['roll','Roll (if missing)',0],['sec','Section (if missing)',0]].map(a=>'<label><input type="checkbox" class="ciOpt" data-k="'+a[0]+'"'+(a[2]?' checked':'')+'> '+a[1]+'</label>').join('')+
+        '<label style="color:#b91c1c"><input type="checkbox" id="ciOver"> overwrite existing Reg No.</label></div>'+
+      '<div class="toolbar" style="gap:8px;margin:6px 0"><div class="field"><label>Show</label><select id="ciFilter"><option value="ALL">All</option><option>OK</option><option>REVIEW</option><option>CONFLICT</option><option>AMBIG</option><option>NOTFOUND</option></select></div>'+
+        '<button class="btn light" id="ciAllOk">Tick all OK</button><button class="btn light" id="ciNone">Untick all</button><button class="btn secondary" id="ciCsv">⬇ Report (CSV)</button>'+
+        '<button class="btn success" id="ciApply">💾 Apply ticked rows</button></div>'+
+      '<div style="font-size:12px;color:#64748b">OK = BS ID + name (+ father) agree — ticked automatically. REVIEW = check yourself, tick manually. CONFLICT / AMBIG / NOTFOUND are never applied.</div>'+
+      '<div class="tablewrap" style="max-height:55vh;overflow:auto;margin-top:6px"><table style="font-size:12px"><thead><tr><th></th><th>#</th><th>Sec-Roll</th><th>Name (exam portal)</th><th>Father</th><th>BS ID</th><th>Status</th><th>Matched in source</th><th>Father (source)</th><th>Reg No (source)</th><th>Reg No now</th></tr></thead><tbody id="ciBody"></tbody></table></div>';
+    $('ciX').onclick=close; $('ciFilter').onchange=drawRows;
+    $('ciAllOk').onclick=()=>{ ST.rows.forEach(r=>{ r.pick=r.status==='OK'; }); drawRows(); };
+    $('ciNone').onclick=()=>{ ST.rows.forEach(r=>{ r.pick=false; }); drawRows(); };
+    $('ciCsv').onclick=downloadCsv; $('ciApply').onclick=apply;
+    drawRows();
+  }
+  function drawRows(){
+    const f=$('ciFilter').value, M=MODES[ST.mode];
+    $('ciBody').innerHTML=ST.rows.filter(r=>f==='ALL'||r.status===f).map(r=>{
+      const rk=regKeyOf(r.s), cur=rk?r.s[rk]:'';
+      const can=r.rec&&(r.status==='OK'||r.status==='REVIEW');
+      return '<tr><td>'+(can?'<input type="checkbox" class="ciPick" data-i="'+r.i+'"'+(r.pick?' checked':'')+'>':'')+'</td><td>'+(r.i+1)+'</td><td>'+esc((M.secTxt(r.s)?M.secTxt(r.s)+'-':'')+M.rollTxt(r.s))+'</td><td>'+esc(r.it.name)+'</td><td>'+esc(r.it.father)+'</td><td>'+esc(r.it.bs)+'</td>'+
+        '<td><b style="color:'+COLORS[r.status]+'">'+r.status+'</b><br><span style="color:#64748b">'+esc(r.how||'')+'</span></td>'+
+        '<td>'+esc(r.rec?r.rec.nameRaw:'')+'</td><td>'+esc(r.rec?r.rec.fatherRaw:'')+'</td><td><b>'+esc(r.rec?r.rec.reg:'')+'</b></td><td>'+esc(cur)+'</td></tr>';
+    }).join('')||'<tr><td colspan="11">Nothing to show.</td></tr>';
+    document.querySelectorAll('.ciPick').forEach(c=>c.onchange=()=>{ ST.rows[+c.dataset.i].pick=c.checked; });
+  }
+  function downloadCsv(){
+    const M=MODES[ST.mode];
+    const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+    const lines=[['#','Section','Roll','Name','Father','BS ID','Status','How','Source name','Source father','Source reg no'].map(q).join(',')];
+    ST.rows.forEach(r=>lines.push([r.i+1,M.secTxt(r.s),M.rollTxt(r.s),r.it.name,r.it.father,r.it.bs,r.status,r.how||'',r.rec?r.rec.nameRaw:'',r.rec?r.rec.fatherRaw:'',r.rec?r.rec.reg:''].map(q).join(',')));
+    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv'})); a.download='cert_import_'+M.cls+'_report.csv'; a.click();
+  }
+  function setIfMissing(s,test,defKey,val){
+    if(!val) return false;
+    const k=Object.keys(s).find(k=>test(nk(k)));
+    if(k!==undefined&&String(s[k]==null?'':s[k]).trim()!=='') return false;
+    s[k!==undefined?k:defKey]=val; return true;
+  }
+  async function apply(){
+    const M=MODES[ST.mode];
+    const opt={}; document.querySelectorAll('.ciOpt').forEach(c=>opt[c.dataset.k]=c.checked);
+    const over=$('ciOver').checked;
+    const todo=ST.rows.filter(r=>r.pick&&r.rec&&(r.status==='OK'||r.status==='REVIEW'));
+    if(!todo.length){ alert('No rows ticked.'); return; }
+    const backup=JSON.stringify(M.list());
+    const c={reg:0,bs:0,dob:0,father:0,mother:0,mobile:0,caste:0,sex:0,roll:0,sec:0,regKept:0};
+    todo.forEach(r=>{
+      const s=r.s, x=r.rec;
+      if(opt.reg&&x.reg){
+        const k=regKeyOf(s), cur=k?String(s[k]||'').trim():'';
+        if(!cur||over){ s[k||'Registration No']=x.reg; c.reg++; } else if(cur!==x.reg) c.regKept++;
+      }
+      if(opt.bs&&x.bsFull&&setIfMissing(s,T.bs,M.bsKeyName,x.bsFull)) c.bs++;
+      if(opt.dob&&setIfMissing(s,T.dob,'DOB',x.dob)) c.dob++;
+      if(opt.father&&setIfMissing(s,T.father,"Father's Name",x.fatherRaw)) c.father++;
+      if(opt.mother&&setIfMissing(s,T.mother,"Mother's Name",x.motherRaw)) c.mother++;
+      if(opt.mobile&&setIfMissing(s,T.mobile,'Mobile',x.mobile)) c.mobile++;
+      if(opt.caste&&setIfMissing(s,T.caste,'Caste',x.caste)) c.caste++;
+      if(opt.sex&&setIfMissing(s,T.sex,'Sex',x.sex)) c.sex++;
+      if(opt.roll&&setIfMissing(s,T.roll,'Roll',x.roll)) c.roll++;
+      if(opt.sec&&setIfMissing(s,T.sec,'Section',x.sec)) c.sec++;
+    });
+    const changed=c.reg+c.bs+c.dob+c.father+c.mother+c.mobile+c.caste+c.sex+c.roll+c.sec;
+    if(!changed){ alert('Nothing to change — all ticked students already have these values.'+(c.regKept?'\n'+c.regKept+' existing Reg No differ from the source (tick "overwrite" to replace).':'')); return; }
+    if(M.cls==='XI'&&typeof importedHeaders!=='undefined'){ ['Registration No','DOB','Banglar Siksha ID',"Father's Name"].forEach(h=>{ if(!importedHeaders.includes(h)&&M.list().some(x=>x[h])) importedHeaders.push(h); }); }
+    try{
+      await M.save();
+      alert('Saved ✔\nRegistration No filled: '+c.reg+(c.regKept?' (kept '+c.regKept+' different existing)':'')+'\nBS ID: '+c.bs+' · DOB: '+c.dob+' · Father: '+c.father+' · Mother: '+c.mother+' · Mobile: '+c.mobile+' · Caste: '+c.caste+' · Sex: '+c.sex+' · Roll: '+c.roll+' · Section: '+c.sec);
+      close();
+    }catch(e){
+      const arr=JSON.parse(backup); const live=M.list(); live.length=0; arr.forEach(x=>live.push(x));
+      try{ ST.mode==='XI'?renderStudents():MP.renderStudents(); }catch(_){}
+      alert('Save failed, nothing changed: '+e.message);
+    }
+  }
+
+  /* ---- buttons next to the existing "Import DOB" buttons (admin only) ---- */
+  function mkBtn(afterId,id,mode){
+    const a=$(afterId); if(!a||$(id)) return;
+    const b=document.createElement('button'); b.id=id; b.className='btn warning'; b.style.display='none';
+    b.title='Match with the certificate portal by BS ID + Name + Father and fill the Registration No.';
+    b.textContent='🔗 Import Reg No (Certificate Portal)'; b.onclick=()=>step1(mode);
+    a.insertAdjacentElement('afterend',b);
+  }
+  mkBtn('importDobBtn','certImpBtnXI','XI'); mkBtn('mp_importDobBtn','certImpBtnX','X');
+  setInterval(()=>{ ['certImpBtnXI','certImpBtnX'].forEach(id=>{ const b=$(id); if(b) b.style.display=(typeof isAdmin==='function'&&isAdmin())?'inline-block':'none'; }); },1500);
+})();
+</script>
+
 </body>
 </html>
