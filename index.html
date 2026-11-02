@@ -4320,9 +4320,16 @@ function parseListPages(pages){
     const M=MODES[ST.mode], list=M.list();
     const items=list.map(s=>({name:M.name(s),father:M.father(s),bs:M.bs(s)}));
     const res=match(items,ST.recs);
-    ST.rows=res.map((r,i)=>({i,s:list[i],it:items[i],...r,pick:r.status==='OK'}));
+    ST.rows=res.map((r,i)=>({i,s:list[i],it:items[i],...r,pick:r.status==='OK',manualReg:'',cands:r.status==='OK'?[]:candsFor(items[i])}));
     renderPreview();
   }
+  /* candidate source records for a row that is not an automatic OK: same BS ID, or similar name */
+  function candsFor(it){
+    const name=nm(it.name),father=nm(it.father),bs=bsKey(it.bs);
+    return ST.recs.map(r=>{ const n=sim(name,r.name),f=sim(father,r.father); return {r,sc:(n||0)+(f||0)*0.7+((bs&&r.bs===bs)?1:0)}; })
+      .filter(x=>x.sc>=0.6).sort((a,b)=>b.sc-a.sc).slice(0,8).map(x=>x.r);
+  }
+  const candLbl=r=>r.nameRaw+' | F: '+(r.fatherRaw||'—')+' | BS: '+(r.bsFull||'—')+' | DOB: '+(r.dob||'—')+' | Reg: '+(r.reg||'—');
   const COLORS={OK:'#16a34a',REVIEW:'#d97706',CONFLICT:'#dc2626',AMBIG:'#dc2626',NOTFOUND:'#64748b'};
   function regKeyOf(s){ return Object.keys(s).find(k=>T.reg(nk(k))); }
   function renderPreview(){
@@ -4340,8 +4347,8 @@ function parseListPages(pages){
       '<div class="toolbar" style="gap:8px;margin:6px 0"><div class="field"><label>Show</label><select id="ciFilter"><option value="ALL">All</option><option>OK</option><option>REVIEW</option><option>CONFLICT</option><option>AMBIG</option><option>NOTFOUND</option></select></div>'+
         '<button class="btn light" id="ciAllOk">Tick all OK</button><button class="btn light" id="ciNone">Untick all</button><button class="btn secondary" id="ciCsv">⬇ Report (CSV)</button>'+
         '<button class="btn success" id="ciApply">💾 Apply ticked rows</button></div>'+
-      '<div style="font-size:12px;color:#64748b">OK = BS ID + name (+ father) agree — ticked automatically. REVIEW = check yourself, tick manually. CONFLICT / AMBIG / NOTFOUND are never applied.</div>'+
-      '<div class="tablewrap" style="max-height:55vh;overflow:auto;margin-top:6px"><table style="font-size:12px"><thead><tr><th></th><th>#</th><th>Sec-Roll</th><th>Name (exam portal)</th><th>Father</th><th>BS ID</th><th>Status</th><th>Matched in source</th><th>Father (source)</th><th>Reg No (source)</th><th>Reg No now</th></tr></thead><tbody id="ciBody"></tbody></table></div>';
+      '<div style="font-size:12px;color:#64748b">OK = BS ID + name (+ father) agree — ticked automatically. REVIEW = check yourself, tick manually. For CONFLICT / AMBIG / NOTFOUND / REVIEW rows use the last column: pick the right certificate-portal record from the list (name, father, BS ID, DOB, Reg shown) or type the Reg No yourself — the row is then ticked and applied.</div>'+
+      '<div class="tablewrap" style="max-height:55vh;overflow:auto;margin-top:6px"><table style="font-size:12px"><thead><tr><th></th><th>#</th><th>Sec-Roll</th><th>Name (exam portal)</th><th>Father</th><th>BS ID</th><th>Status</th><th>Matched in source</th><th>Father (source)</th><th>Reg No (source)</th><th>Reg No now</th><th>Pick candidate / type Reg No directly</th></tr></thead><tbody id="ciBody"></tbody></table></div>';
     $('ciX').onclick=close; $('ciFilter').onchange=drawRows;
     $('ciAllOk').onclick=()=>{ ST.rows.forEach(r=>{ r.pick=r.status==='OK'; }); drawRows(); };
     $('ciNone').onclick=()=>{ ST.rows.forEach(r=>{ r.pick=false; }); drawRows(); };
@@ -4352,12 +4359,26 @@ function parseListPages(pages){
     const f=$('ciFilter').value, M=MODES[ST.mode];
     $('ciBody').innerHTML=ST.rows.filter(r=>f==='ALL'||r.status===f).map(r=>{
       const rk=regKeyOf(r.s), cur=rk?r.s[rk]:'';
-      const can=r.rec&&(r.status==='OK'||r.status==='REVIEW');
-      return '<tr><td>'+(can?'<input type="checkbox" class="ciPick" data-i="'+r.i+'"'+(r.pick?' checked':'')+'>':'')+'</td><td>'+(r.i+1)+'</td><td>'+esc((M.secTxt(r.s)?M.secTxt(r.s)+'-':'')+M.rollTxt(r.s))+'</td><td>'+esc(r.it.name)+'</td><td>'+esc(r.it.father)+'</td><td>'+esc(r.it.bs)+'</td>'+
+      const can=!!(r.rec||r.manualReg);
+      let manual='';
+      if(r.status!=='OK'){
+        manual='<select class="ciCand" data-i="'+r.i+'" style="max-width:340px;font-size:11px"><option value="-1">— '+(r.cands.length?r.cands.length+' candidate(s) from certificate data':'no candidate')+' —</option>'+
+          r.cands.map((c,j)=>'<option value="'+j+'"'+(r.rec===c?' selected':'')+'>'+esc(candLbl(c))+'</option>').join('')+'</select><br>'+
+          '<input class="ciMan" data-i="'+r.i+'" placeholder="type Reg No" value="'+esc(r.manualReg)+'" style="width:150px;font-size:12px;margin-top:3px">';
+      }
+      return '<tr><td><input type="checkbox" class="ciPick" id="ciPick'+r.i+'" data-i="'+r.i+'"'+(r.pick?' checked':'')+(can?'':' disabled')+'></td><td>'+(r.i+1)+'</td><td>'+esc((M.secTxt(r.s)?M.secTxt(r.s)+'-':'')+M.rollTxt(r.s))+'</td><td>'+esc(r.it.name)+'</td><td>'+esc(r.it.father)+'</td><td>'+esc(r.it.bs)+'</td>'+
         '<td><b style="color:'+COLORS[r.status]+'">'+r.status+'</b><br><span style="color:#64748b">'+esc(r.how||'')+'</span></td>'+
-        '<td>'+esc(r.rec?r.rec.nameRaw:'')+'</td><td>'+esc(r.rec?r.rec.fatherRaw:'')+'</td><td><b>'+esc(r.rec?r.rec.reg:'')+'</b></td><td>'+esc(cur)+'</td></tr>';
-    }).join('')||'<tr><td colspan="11">Nothing to show.</td></tr>';
+        '<td>'+esc(r.rec?r.rec.nameRaw:'')+'</td><td>'+esc(r.rec?r.rec.fatherRaw:'')+'</td><td><b>'+esc(r.manualReg||(r.rec?r.rec.reg:''))+'</b></td><td>'+esc(cur)+'</td><td>'+manual+'</td></tr>';
+    }).join('')||'<tr><td colspan="12">Nothing to show.</td></tr>';
     document.querySelectorAll('.ciPick').forEach(c=>c.onchange=()=>{ ST.rows[+c.dataset.i].pick=c.checked; });
+    document.querySelectorAll('.ciCand').forEach(sel=>sel.onchange=()=>{
+      const r=ST.rows[+sel.dataset.i], j=+sel.value;
+      r.rec=j>=0?r.cands[j]:null; r.pick=!!(r.rec||r.manualReg); drawRows();
+    });
+    document.querySelectorAll('.ciMan').forEach(inp=>inp.oninput=()=>{
+      const r=ST.rows[+inp.dataset.i]; r.manualReg=inp.value.trim(); r.pick=!!(r.rec||r.manualReg);
+      const cb=$('ciPick'+r.i); if(cb){ cb.disabled=!(r.rec||r.manualReg); cb.checked=r.pick; }
+    });
   }
   function downloadCsv(){
     const M=MODES[ST.mode];
@@ -4376,15 +4397,15 @@ function parseListPages(pages){
     const M=MODES[ST.mode];
     const opt={}; document.querySelectorAll('.ciOpt').forEach(c=>opt[c.dataset.k]=c.checked);
     const over=$('ciOver').checked;
-    const todo=ST.rows.filter(r=>r.pick&&r.rec&&(r.status==='OK'||r.status==='REVIEW'));
+    const todo=ST.rows.filter(r=>r.pick&&(r.rec||r.manualReg));
     if(!todo.length){ alert('No rows ticked.'); return; }
     const backup=JSON.stringify(M.list());
     const c={reg:0,bs:0,dob:0,father:0,mother:0,mobile:0,caste:0,sex:0,roll:0,sec:0,regKept:0};
     todo.forEach(r=>{
-      const s=r.s, x=r.rec;
-      if(opt.reg&&x.reg){
+      const s=r.s, x=r.rec||{}, regV=r.manualReg||x.reg||'';
+      if(r.manualReg||(opt.reg&&regV)){
         const k=regKeyOf(s), cur=k?String(s[k]||'').trim():'';
-        if(!cur||over){ s[k||'Registration No']=x.reg; c.reg++; } else if(cur!==x.reg) c.regKept++;
+        if(!cur||over||r.manualReg){ s[k||'Registration No']=regV; c.reg++; } else if(cur!==regV) c.regKept++;
       }
       if(opt.bs&&x.bsFull&&setIfMissing(s,T.bs,M.bsKeyName,x.bsFull)) c.bs++;
       if(opt.dob&&setIfMissing(s,T.dob,'DOB',x.dob)) c.dob++;
