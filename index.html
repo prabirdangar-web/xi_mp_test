@@ -1464,7 +1464,16 @@ function importExcel(){
       alert("XI-REG sheet not found in the Excel file.");
       return;
     }
-      const rows=XLSX.utils.sheet_to_json(ws,{defval:"", range:1});
+      /* find the real header row (the one holding S-1..S-6 / Registration) instead of always assuming row 2 */
+      const grid=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+      let hr=1, best=-1;
+      for(let i=0;i<Math.min(grid.length,12);i++){
+        const cells=(grid[i]||[]).map(c=>String(c||"").toLowerCase().replace(/[^a-z0-9]/g,""));
+        const sc=cells.filter(c=>/^s\d$/.test(c)).length*2+cells.filter(c=>c.startsWith("registration")||c==="name"||c==="roll").length;
+        if(sc>best){best=sc;hr=i;}
+      }
+      if(best<3) hr=1;
+      const rows=XLSX.utils.sheet_to_json(ws,{defval:"", range:hr});
 
       if(!rows.length){
         alert("Excel file contains no data.");
