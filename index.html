@@ -1700,7 +1700,7 @@ function normalizeCode(v){
    This still works when the XI-REG sheet has wrong/missing S-1..S-5 headers (e.g. a column headed "BNGA"). */
 var _slotCache={ref:null,n:-1,keys:[]};
 function valueSlotKeys(){
-  const XI_CODE_SET=new Set(Object.keys(SUBJECT_ALIASES).map(c=>c.toUpperCase()));
+  const XI_CODE_SET=new Set(["BNGA","ENGB","SNSK","MATH","PHIL","HIST","SANT","COMA","GEGR","BIOS","PHYS","CHEM","COMS","POLS"]);
   if(!_slotCache) _slotCache={ref:null,n:-1,keys:[]};
   if(_slotCache.ref===students && _slotCache.n===students.length) return _slotCache.keys;
   const keys={}, tot={};
