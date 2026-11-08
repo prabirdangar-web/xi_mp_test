@@ -1105,11 +1105,10 @@ function canEditUnlocked(ownerUid){
   return !ownerUid || !currentUser || ownerUid===currentUser.uid;
 }
 /* SHARED MARKS OWNERSHIP: for subjects listed here, any teacher assigned to the subject (assignedXI) may edit, not only the first saver. Add codes to extend. */
-const SHARED_MARKS_SUBJECTS=["BNGA","ENGB"];
 function canEditMarksShared(subject,ownerUid){
   if(canEditUnlocked(ownerUid)) return true;
   if(!canMarks()) return false;
-  return SHARED_MARKS_SUBJECTS.includes(String(subject||"").toUpperCase()) && assignedToClass("xi",subject);
+  return ["BNGA","ENGB"].includes(String(subject||"").toUpperCase()) && assignedToClass("xi",subject);
 }
 function requireAttendance(){ if(!canAttendance()){ alert("Attendance entry permission is not available for this account."); return false; } return true; }
 function requireMarks(){ if(!canMarks()){ alert("Marks entry permission is not available for this account."); return false; } return true; }
@@ -1338,8 +1337,7 @@ function marksMed(sub){
 /* Bengali sheet keeps the original doc id (backward compatible); Santali sheet gets a _SANT suffix */
 function marksDocId(exam,sub,med,sg){ return (med==="SANTALI"?`${exam}_${sub}_SANT`:`${exam}_${sub}`)+(sg?`_${sg}`:""); }
 /* ---- Male / Female sheets for BNGA and ENGB: separate sheet, owner and lock per sex (students with no sex recorded go to the Male list) ---- */
-const SEX_SPLIT_SUBJECTS=["BNGA","ENGB"];
-function isSexSplit(sub){ return SEX_SPLIT_SUBJECTS.includes(String(sub||"").toUpperCase()); }
+function isSexSplit(sub){ return ["BNGA","ENGB"].includes(String(sub||"").toUpperCase()); }
 function stuSex(st){ const t=String(findStudentValue(st,["Sex","sex","Gender","gender","SEX"])||"").toLowerCase().replace(/[^a-z]/g,""); return ["f","female","girl","girls","g"].includes(t)?"F":"M"; }
 function marksSex(sub){ if(!isSexSplit(sub)) return ""; const el=document.getElementById("marksSexFilter"); return (el&&el.value==="F")?"F":"M"; }
 function sgLabel(sg){ return sg==="F"?"Female":sg==="M"?"Male":""; }
