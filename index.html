@@ -1687,8 +1687,25 @@ function normalizeCode(v){
   return String(v||"").toUpperCase().trim();
 }
 // Slot columns are headers like "S-1", "S 2", "S_3", "S6" etc.
+/* Slot columns = headers like S-1..S-6, PLUS any column whose values are mostly subject codes (BNGA, ENGB, PHYS...).
+   This still works when the XI-REG sheet has wrong/missing S-1..S-5 headers (e.g. a column headed "BNGA"). */
+const XI_CODE_SET=new Set(Object.keys(SUBJECT_ALIASES).map(c=>c.toUpperCase()));
+let _slotCache={ref:null,n:-1,keys:[]};
+function valueSlotKeys(){
+  if(_slotCache.ref===students && _slotCache.n===students.length) return _slotCache.keys;
+  const keys={}, tot={};
+  students.forEach(st=>Object.keys(st).forEach(k=>{
+    const v=normalizeCode(st[k]); if(!v) return;
+    tot[k]=(tot[k]||0)+1; if(XI_CODE_SET.has(v)) keys[k]=(keys[k]||0)+1;
+  }));
+  const out=Object.keys(keys).filter(k=>keys[k]/tot[k]>=0.6 && keys[k]>=3);
+  _slotCache={ref:students,n:students.length,keys:out};
+  return out;
+}
 function getSlotKeys(student){
-  return Object.keys(student).filter(k=>/^s\d+$/i.test(normalizeHeader(k)));
+  const hdr=Object.keys(student).filter(k=>/^s\d+$/i.test(normalizeHeader(k)));
+  const extra=valueSlotKeys().filter(k=>k in student && !hdr.includes(k));
+  return hdr.concat(extra);
 }
 function findSubjectColumnKey(student,subjectCode){
   const keys=Object.keys(student);
