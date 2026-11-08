@@ -1689,9 +1689,10 @@ function normalizeCode(v){
 // Slot columns are headers like "S-1", "S 2", "S_3", "S6" etc.
 /* Slot columns = headers like S-1..S-6, PLUS any column whose values are mostly subject codes (BNGA, ENGB, PHYS...).
    This still works when the XI-REG sheet has wrong/missing S-1..S-5 headers (e.g. a column headed "BNGA"). */
-const XI_CODE_SET=new Set(Object.keys(SUBJECT_ALIASES).map(c=>c.toUpperCase()));
-let _slotCache={ref:null,n:-1,keys:[]};
+var _slotCache={ref:null,n:-1,keys:[]};
 function valueSlotKeys(){
+  const XI_CODE_SET=new Set(Object.keys(SUBJECT_ALIASES).map(c=>c.toUpperCase()));
+  if(!_slotCache) _slotCache={ref:null,n:-1,keys:[]};
   if(_slotCache.ref===students && _slotCache.n===students.length) return _slotCache.keys;
   const keys={}, tot={};
   students.forEach(st=>Object.keys(st).forEach(k=>{
