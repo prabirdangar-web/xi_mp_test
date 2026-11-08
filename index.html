@@ -1105,7 +1105,14 @@ function canEditUnlocked(ownerUid){
   return !ownerUid || !currentUser || ownerUid===currentUser.uid;
 }
 /* SHARED MARKS OWNERSHIP: for subjects listed here, any teacher assigned to the subject (assignedXI) may edit, not only the first saver. Add codes to extend. */
-function canEditMarksShared(subject,ownerUid){
+/* Male / Female allotment (users/{uid}.assignedSex = ["M","F"]); empty or missing = both lists allowed */
+function sexAllowed(sg){
+  if(!sg||isAdmin()) return true;
+  const list=listValue((currentUserProfile||{}).assignedSex).map(x=>x.toUpperCase());
+  return !list.length||list.includes("ALL")||list.includes(String(sg).toUpperCase());
+}
+function canEditMarksShared(subject,ownerUid,sg){
+  if(sg&&!sexAllowed(sg)) return false;
   if(canEditUnlocked(ownerUid)) return true;
   if(!canMarks()) return false;
   return ["BNGA","ENGB"].includes(String(subject||"").toUpperCase()) && assignedToClass("xi",subject);
@@ -1395,6 +1402,8 @@ function xiMedNote(s){
   const n=document.getElementById("marksMedNote"); if(!n) return;
   const mf=document.getElementById("marksMediumField"); if(mf) mf.style.display=isCommonXi(s)?"":"none";
   const sf=document.getElementById("marksSexField"); if(sf) sf.style.display=isSexSplit(s)?"":"none";
+  const ssel=document.getElementById("marksSexFilter");
+  if(ssel&&isSexSplit(s)){ [...ssel.options].forEach(o=>{o.disabled=!sexAllowed(o.value);}); const cur=ssel.options[ssel.selectedIndex]; if(cur&&cur.disabled){ const f=[...ssel.options].find(o=>!o.disabled); if(f) ssel.value=f.value; } }
   if(s==="SANT"){ n.style.display="block"; n.textContent="SANTALI SUBJECT — the subject enrollment list is limited to students who have SANT in their subject slots."; }
   else if(s==="BNGA"){ n.style.display="block"; n.textContent="BENGALI SUBJECT — the subject enrollment list is limited to students who have BNGA in their subject slots."; }
   else { n.style.display="block"; n.textContent="COMMON SUBJECT (e.g. POLS): Bengali-medium and Santali-medium students have SEPARATE marks sheets and SEPARATE locks. Choose the medium list in Student Medium / List; saving, finalizing & locking, and Admin unlock apply only to the selected medium."; }
@@ -2072,7 +2081,7 @@ async function lockMarks(){
   const med=marksMed(subject), sg=marksSex(subject);
   if(!confirm("Finalize and LOCK these marks"+(listLabel(med,sg)?" for the "+listLabel(med,sg)+" only":"")+"?"))return;
   if(!requireAssignedClass("xi",subject,"subject")) return;
-  if(!canEditMarksShared(subject,marksOwnerUid)){alert("These marks are assigned to another staff member. Only Admin can finalize/change them.");return;}
+  if(!canEditMarksShared(subject,marksOwnerUid,sg)){alert("These marks are assigned to another staff member or another (Male/Female) list. Only Admin can finalize/change them.");return;}
   try{await db.collection("xiMarks").doc(marksDocId(exam,subject,med,sg)).set({exam,subject,medium:med||null,sexGroup:sg||null,rows:marksRows.map(r=>{
       const absent=marksAbsentKeys.has(studentKey(r.student));
       return {student:r.student,theory:absent?"":r.theory,component:absent?"":r.component};
@@ -2156,7 +2165,7 @@ function setMark(i,key,value){
   if(!requireMarks()) return;
   if(marksAttendanceStatus!=="locked"){alert("Attendance is not yet finalized for this subject. Marks entry is disabled.");renderMarks();return;}
   if(mkLockedFor()){alert("Marks are locked. Only Admin can unlock.");renderMarks();return;}
-  if(!canEditMarksShared(document.getElementById("marksSubject").value,marksOwnerUid)){alert("These marks are assigned to another staff member. Only Admin can change them.");return;}
+  if(!canEditMarksShared(document.getElementById("marksSubject").value,marksOwnerUid,marksSex(document.getElementById("marksSubject").value))){alert("These marks are assigned to another staff member. Only Admin can change them.");return;}
   const r=marksRows[i];
   if(marksAbsentKeys.has(studentKey(r.student))){alert("This student was recorded ABSENT in the locked attendance. Marks entry is locked for this student.");renderMarks();return;}
   marksRows[i][key]=value;
@@ -2177,7 +2186,7 @@ async function saveMarks(){
     return;
   }
   if(!requireAssignedClass("xi",subject,"subject")) return;
-  if(!canEditMarksShared(subject,marksOwnerUid)){alert("These marks are assigned to another staff member. Only Admin can change them.");return;}
+  if(!canEditMarksShared(subject,marksOwnerUid,sg)){alert("These marks are assigned to another staff member or another (Male/Female) list. Only Admin can change them.");return;}
 
   if(!marksRows.length){
     alert("Load the marks sheet first.");
@@ -2437,7 +2446,7 @@ async function upsertMark(exam,sub,student,vals){
   const ref=db.collection("xiMarks").doc(marksDocId(exam,sub,med,sg));
   const snap=await ref.get(), d=snap.exists?snap.data():{};
   if(d.locked&&!isAdmin()) throw new Error(exam+" marks are locked. Only Admin can change them.");
-  if(snap.exists&&!canEditMarksShared(sub,d.ownerUid||d.updatedBy)) throw new Error("These marks are assigned to another staff member.");
+  if(snap.exists&&!canEditMarksShared(sub,d.ownerUid||d.updatedBy,sg)) throw new Error("These marks are assigned to another staff member.");
   const rows=d.rows||[], key=studentKey(student);
   let row=rows.find(x=>studentKey(x.student)===key);
   if(!row){ row={student,theory:"",component:""}; rows.push(row); }
@@ -3656,6 +3665,7 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
         if(parts.length) m.textContent='Your subjects — '+parts.join('   |   ');
       }
     }
+    try{ xiMedNote(document.getElementById('marksSubject').value); }catch(e){}
     const ns=$('navStaff'); if(ns) ns.style.display=isAdmin()?'block':'none';
     const sr=$('shareRegPanel'); if(sr) sr.style.display=isAdmin()?'block':'none';
     const rb=$('regBtn'); if(rb) rb.style.display=(currentUser&&!currentUser.isAnonymous&&currentRole!=='viewer')?'none':'inline-block';
@@ -3707,7 +3717,7 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
         const roleSel='<label>Role&nbsp;<select class="st-role">'+ROLES.map(r=>'<option value="'+r+'"'+(r===role?' selected':'')+'>'+r+'</option>').join('')+(ROLES.includes(role)?'':'<option value="'+esc(role)+'" selected>'+esc(role)+'</option>')+'</select></label>';
         const reqMed=String(u.requestedMedium||'').split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
         const curMed=('medium' in u&&listValue(u.medium).length)?up(u.medium):reqMed;
-        const medBox='<div class="stbox stmed"><h4>Medium</h4><div class="stchips">'+[['BENGALI','🟢 Bengali medium'],['SANTALI','🟠 Santali medium']].map(m=>chip('st-med',m[0],m[1],curMed.includes(m[0]))).join('')+'</div></div>';
+        const medBox='<div class="stbox stmed"><h4>Medium</h4><div class="stchips">'+[['BENGALI','🟢 Bengali medium'],['SANTALI','🟠 Santali medium']].map(m=>chip('st-med',m[0],m[1],curMed.includes(m[0]))).join('')+'</div>'+'<h4 style="margin-top:12px">Male / Female list (BNGA &amp; ENGB)</h4><div class="stchips">'+[['M','Male list'],['F','Female list']].map(x=>chip('st-sex',x[0],x[1],('assignedSex' in u&&listValue(u.assignedSex).length)?up(u.assignedSex).includes(x[0]):true)).join('')+'</div></div>';
         const xiBox='<div class="stbox"><h4>Class XI subjects</h4><div class="stchips">'+xiCodes.map(c=>chip('st-xi',c,c+(XI_NAMES[c]?' - '+XI_NAMES[c]:'')+medTag(c),preXI.includes(c))).join('')+'</div></div>';
         const mpBox='<div class="stbox"><h4>Class X subjects</h4><div class="stchips">'+mpCodes.map(c=>chip('st-mp',c,(MP_NAMES[c]||c)+medTag(c),preMP.includes(c))).join('')+'</div></div>';
         const foot='<div class="stfoot"><button class="btn light" onclick="resetStaffPw(this)">🔑 Reset Password</button><button class="btn success" onclick="saveStaff(this)">💾 Save</button></div>';
@@ -3737,13 +3747,15 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
     const xiS=isT?[...card.querySelectorAll('.st-xi:checked')].map(x=>x.value):[];
     const mpS=isT?[...card.querySelectorAll('.st-mp:checked')].map(x=>x.value):[];
     const medS=isT?[...card.querySelectorAll('.st-med:checked')].map(x=>x.value):[];
+    const sexS=isT?[...card.querySelectorAll('.st-sex:checked')].map(x=>x.value):[];
+    if(isT&&!sexS.length){alert('Tick Male list and/or Female list for this teacher (used for BNGA and ENGB).');return;}
     if(isT&&!medS.length){alert('Tick the medium (Bengali and/or Santali) for this teacher.');return;}
     const badLang=c=>(c==='BNGA'&&!medS.includes('BENGALI'))||(c==='SANT'&&!medS.includes('SANTALI'));
     if(isT){ for(let i=xiS.length-1;i>=0;i--) if(badLang(xiS[i])) xiS.splice(i,1); for(let i=mpS.length-1;i>=0;i--) if(badLang(mpS[i])) mpS.splice(i,1); }
     const subs=[...new Set(xiS.concat(mpS))];
     if(isT&&!subs.length){alert('Tick at least one subject for Class XI and/or Class X.');return;}
     try{
-      await db.collection('users').doc(uid).set({role,assignedSubjects:subs,assignedXI:xiS,assignedMP:mpS,medium:medS,approvedBy:(currentUser&&(currentUser.email||currentUser.uid))||'',approvedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+      await db.collection('users').doc(uid).set({role,assignedSubjects:subs,assignedXI:xiS,assignedMP:mpS,medium:medS,assignedSex:sexS,approvedBy:(currentUser&&(currentUser.email||currentUser.uid))||'',approvedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
       card.className='stcard r-'+role;
       btn.textContent='Saved ✔'; setTimeout(()=>{btn.textContent='💾 Save'},1500);
     }catch(e){alert('Save failed: '+e.message);}
