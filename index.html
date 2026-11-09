@@ -1493,6 +1493,7 @@ function importExcel(){
         sl:i+1,
         ...r
       }));
+      try{ const dk=dobColumnKey(); if(dk) students.forEach(st=>{ const fd=fmtDob(st[dk]); if(fd) st[dk]=fd; }); }catch(e){}
 
       renderStudents();
       updateDashboard();
@@ -1522,10 +1523,14 @@ function renderStudents(){
     return;
   }
   const headers=studentHeaders();
-  head.innerHTML="<tr><th>SL</th>"+headers.map(h=>`<th>${escapeHtml(h)}</th>`).join("")+(admin?"<th class='noprint'>Action</th>":"")+"</tr>";
+  const _L=sbLayout({}), _lab={}; _L.slots.forEach(sl=>{ if(sl.fixed) _lab[sl.key]="S-"+sl.n; });
+  const _dk=(_L.fields.find(f=>f.id==="dob")||{}).key;
+  if(_dk&&!/^dob$/.test(normalizeHeader(_dk))) _lab[_dk]="DOB";
+  const _cell=(h,v)=>h===_dk?(fmtDob(v)||v):v;
+  head.innerHTML="<tr><th>SL</th>"+headers.map(h=>`<th${_lab[h]?` title="Excel header: ${escapeHtml(h)}"`:""}>${escapeHtml(_lab[h]||h)}</th>`).join("")+(admin?"<th class='noprint'>Action</th>":"")+"</tr>";
   body.innerHTML=students.map((s,idx)=>({s,idx}))
     .filter(o=>Object.values(o.s).join(" ").toLowerCase().includes(q))
-    .map((o,i)=>"<tr><td>"+(i+1)+"</td>"+headers.map(h=>`<td>${escapeHtml(o.s[h]??"")}</td>`).join("")+
+    .map((o,i)=>"<tr><td>"+(i+1)+"</td>"+headers.map(h=>`<td>${escapeHtml(_cell(h,o.s[h]??"")??"")}</td>`).join("")+
       (admin?`<td class="noprint" style="white-space:nowrap"><button class="btn light" onclick="editStudent(${o.idx})">✏️ Edit</button> <button class="btn danger" onclick="deleteStudent(${o.idx})">🗑</button></td>`:"")+"</tr>").join("");
 }
 async function persistStudents(){
@@ -1533,27 +1538,108 @@ async function persistStudents(){
   await db.collection("students").doc("xi2026").set({students:students,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
   renderStudents(); updateDashboard();
 }
-function addStudent(){
-  if(!requireAdmin()) return;
-  const H=studentHeaders();
-  showModal("Add Student",H.map(h=>({label:h,val:""})),async v=>{
-    const o={}; H.forEach((h,i)=>o[h]=v[i]);
-    if(!getStudentReg(o)&&!getStudentName(o)){ alert("Enter at least Registration No. or Name."); return false; }
-    const reg=String(getStudentReg(o)||"").trim();
-    if(reg&&students.some(x=>String(getStudentReg(x)||"").trim()===reg)){ alert("A student with this Registration No. already exists."); return false; }
-    if(!importedHeaders.length) importedHeaders=H;
-    students.push({sl:students.length+1,...o});
-    try{ await persistStudents(); }catch(e){ students.pop(); alert("Save failed: "+e.message); return false; }
+/* ---------- Student profile board (add / edit) ---------- */
+function sbKey(st,regs){ return Object.keys(st).find(k=>{ const n=normalizeHeader(k); return regs.some(r=>r.test(n)); })||null; }
+const SB_FIELDS=[
+  {id:"name",label:"Student Name",rx:[/^name$/,/^studentname$/,/^nameofstudent/,/^nameofthestudent/],wide:true},
+  {id:"reg",label:"Registration No.",rx:[/^registration/,/^regno/,/^regn/]},
+  {id:"roll",label:"Roll",rx:[/^roll/]},
+  {id:"section",label:"Section",rx:[/^section$/,/^sec$/]},
+  {id:"sex",label:"Sex",rx:[/^sex$/,/^gender$/],sex:true},
+  {id:"dob",label:"Date of Birth",rx:[/^dob$/,/birth/]},
+  {id:"caste",label:"Caste / Category",rx:[/^caste/,/^category/]},
+  {id:"mobile",label:"Mobile",rx:[/mobile/,/phone/,/contact/]},
+  {id:"father",label:"Father's Name",rx:[/^father/,/^guardian/]},
+  {id:"mother",label:"Mother's Name",rx:[/^mother/]}
+];
+function sbLayout(st){
+  const H=studentHeaders(); const used=new Set(); const fields=[];
+  const keys=Array.from(new Set([...H,...Object.keys(st)])).filter(k=>k!=="sl");
+  SB_FIELDS.forEach(f=>{
+    let k=keys.find(x=>!used.has(x)&&f.rx.some(r=>r.test(normalizeHeader(x))));
+    if(f.sex){ const all=keys.filter(x=>/^(sex|gender)$/.test(normalizeHeader(x))||/male/.test(normalizeHeader(x))); all.forEach(x=>used.add(x)); fields.push({...f,key:all[0]||"Gender",extra:all.slice(1)}); return; }
+    if(!k&&f.id==="dob"){ const dk=dobColumnKey(); if(dk&&keys.includes(dk)&&!used.has(dk)) k=dk; }
+    if(k) used.add(k);
+    fields.push({...f,key:k||({name:"Name",reg:"Registration No.",roll:"Roll",section:"Section",dob:"DOB",caste:"Caste",mobile:"Mobile",father:"Father's Name",mother:"Mother's Name"}[f.id])});
   });
+  /* subject slots S-1..S-6: real S-n headers first, then columns whose values are subject codes but whose header is wrong */
+  const slotHdr={}; keys.forEach(k=>{ const m=/^s(\d+)$/.exec(normalizeHeader(k)); if(m&&!used.has(k)){ slotHdr[+m[1]]=k; } });
+  const vkeys=(typeof valueSlotKeys==="function"?valueSlotKeys():[]).filter(k=>keys.includes(k)&&!Object.values(slotHdr).includes(k)&&!used.has(k));
+  const slots=[]; let vi=0;
+  for(let n=1;n<=6;n++){
+    if(slotHdr[n]){ slots.push({n,key:slotHdr[n],fixed:false}); }
+    else if(vi<vkeys.length){ slots.push({n,key:vkeys[vi],fixed:true}); vi++; }
+    else slots.push({n,key:"S-"+n,fixed:false,isNew:!keys.includes("S-"+n)});
+  }
+  slots.forEach(sl=>used.add(sl.key));
+  fields.forEach(f=>{ used.add(f.key); (f.extra||[]).forEach(e=>used.add(e)); });
+  const others=keys.filter(k=>!used.has(k));
+  return {fields,slots,others};
 }
-function editStudent(i){
+function studentBoard(idx){
   if(!requireAdmin()) return;
-  const H=studentHeaders(), old=students[i];
-  showModal("Edit Student",H.map(h=>({label:h,val:old[h]??""})),async v=>{
-    const backup={...old}; H.forEach((h,k)=>old[h]=v[k]);
-    try{ await persistStudents(); }catch(e){ Object.assign(old,backup); alert("Save failed: "+e.message); return false; }
-  });
+  const isNew=idx<0, st=isNew?{}:students[idx], L=sbLayout(st);
+  const codes=Array.from(new Set([...(typeof SUBJECTS!=="undefined"?SUBJECTS:[]),...(typeof ATTENDANCE_SUBJECTS!=="undefined"?ATTENDANCE_SUBJECTS:[])])).filter(Boolean).sort();
+  closeModal();
+  const d=document.createElement("div"); d.id="modalBg";
+  d.style.cssText="position:fixed;inset:0;background:#0008;z-index:100;display:flex;align-items:center;justify-content:center;padding:12px";
+  const inp=(id,val,ro)=>`<input id="${id}" type="text" value="${escapeHtml(val??"")}" ${ro?"readonly":""} style="width:100%">`;
+  const fld=f=>{
+    let v=st[f.key]??"";
+    if(f.id==="dob"){ const fd=fmtDob(v); if(fd) v=fd; }
+    if(f.sex){ const cur=/^f/i.test(String(v))?"Female":/^m/i.test(String(v))?"Male":""; return `<div class="field"><label>${f.label}</label><select id="sb_${f.id}" style="width:100%"><option value=""></option><option${cur==="Male"?" selected":""}>Male</option><option${cur==="Female"?" selected":""}>Female</option></select></div>`; }
+    return `<div class="field" style="${f.wide?"grid-column:1/-1":""}"><label>${f.label}${f.id==="dob"?' <span style="font-weight:400;color:#64748b">(DD-MM-YYYY)</span>':""}</label>${inp("sb_"+f.id,v)}</div>`;
+  };
+  const slotHtml=L.slots.map(sl=>{
+    const v=subjCode(st[sl.key]??"");
+    const opts=Array.from(new Set([...codes,v].filter(Boolean))).sort();
+    const note=sl.fixed?`<div style="font-size:10px;color:#b45309">column “${escapeHtml(sl.key)}”</div>`:(sl.isNew?`<div style="font-size:10px;color:#64748b">new</div>`:"");
+    return `<div class="field"><label>S-${sl.n}</label><select class="sb-slot" id="sb_s${sl.n}" style="width:100%"><option value=""></option>${opts.map(o=>`<option${o===v?" selected":""}>${escapeHtml(o)}</option>`).join("")}</select>${note}</div>`;
+  }).join("");
+  const otherHtml=L.others.map((k,i)=>`<div class="field"><label>${escapeHtml(k)}</label>${inp("sb_o"+i,st[k]??"")}</div>`).join("");
+  d.innerHTML=`<div class="panel" style="width:760px;max-width:100%;max-height:92vh;overflow:auto;margin:0">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px">
+      <div><h3 style="margin:0">${isNew?"Add Student":"Student Profile"}</h3>
+      <div id="sbTitle" style="font-weight:700;font-size:16px;margin-top:4px"></div></div>
+      <button class="btn light" onclick="closeModal()">✕</button></div>
+    <div id="sbChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+    <div style="font-weight:700;color:#1e3a8a;margin:6px 0">Personal details</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px">${L.fields.map(fld).join("")}</div>
+    <div style="font-weight:700;color:#1e3a8a;margin:14px 0 6px">Subjects (S-1 to S-6)</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px">${slotHtml}</div>
+    ${L.others.length?`<details style="margin-top:14px"><summary style="cursor:pointer;font-weight:700;color:#475569">Other imported columns (${L.others.length})</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-top:8px">${otherHtml}</div></details>`:""}
+    <div class="toolbar" style="margin-top:14px"><button class="btn success" id="sbSave">Save</button><button class="btn light" onclick="closeModal()">Cancel</button></div></div>`;
+  document.body.appendChild(d);
+  const g=id=>document.getElementById(id);
+  const refresh=()=>{
+    g("sbTitle").textContent=[g("sb_name").value,g("sb_reg").value?("· Reg "+g("sb_reg").value):"",g("sb_roll").value?("· Roll "+g("sb_roll").value):""].filter(Boolean).join(" ");
+    const subs=L.slots.map(sl=>g("sb_s"+sl.n).value).filter(Boolean);
+    const sx=g("sb_sex").value;
+    g("sbChips").innerHTML=(sx?`<span class="badge" style="background:${sx==="Female"?"#fce7f3":"#dbeafe"};color:#172033">${sx}</span>`:"")+
+      (subs.length?subs.map(c=>`<span class="badge" style="background:#e2e8f0;color:#172033">${escapeHtml(c)}</span>`).join(""):`<span style="color:#b45309;font-size:12px">No subjects set</span>`)+
+      (subs.length&&subs.length<6?`<span style="color:#b45309;font-size:12px">${subs.length} of 6 subjects</span>`:"");
+  };
+  d.querySelectorAll("input,select").forEach(e=>{ e.oninput=refresh; e.onchange=refresh; }); refresh();
+  g("sbSave").onclick=async()=>{
+    const btn=g("sbSave"); btn.disabled=true;
+    const o={}; const val=id=>g(id).value.trim();
+    L.fields.forEach(f=>{ let v=val("sb_"+f.id); if(f.id==="dob"&&v){ const nd=fmtDob(v); if(nd) v=nd; } o[f.key]=v; (f.extra||[]).forEach(e=>o[e]=v); });
+    L.slots.forEach(sl=>{ o[sl.key]=val("sb_s"+sl.n); });
+    L.others.forEach((k,i)=>{ o[k]=val("sb_o"+i); });
+    const reg=String(o[L.fields.find(f=>f.id==="reg").key]||"").trim(), nm=String(o[L.fields.find(f=>f.id==="name").key]||"").trim();
+    if(!reg&&!nm){ alert("Enter at least Registration No. or Name."); btn.disabled=false; return; }
+    if(reg&&students.some((x,i)=>i!==idx&&String(getStudentReg(x)||"").trim()===reg)){ alert("A student with this Registration No. already exists."); btn.disabled=false; return; }
+    const prevHeaders=importedHeaders.slice();
+    if(importedHeaders.length) Object.keys(o).forEach(k=>{ if(!importedHeaders.includes(k)) importedHeaders.push(k); });
+    let backup=null;
+    if(isNew){ students.push({sl:students.length+1,...o}); }
+    else { backup={...students[idx]}; Object.assign(students[idx],o); }
+    try{ await persistStudents(); closeModal(); }
+    catch(e){ if(isNew) students.pop(); else { Object.keys(students[idx]).forEach(k=>delete students[idx][k]); Object.assign(students[idx],backup); } importedHeaders=prevHeaders; alert("Save failed: "+e.message); btn.disabled=false; }
+  };
 }
+function addStudent(){ studentBoard(-1); }
+function editStudent(i){ studentBoard(i); }
 async function deleteStudent(i){
   if(!requireAdmin()) return;
   const st=students[i];
@@ -1701,6 +1787,45 @@ function normalizeHeader(h){
 }
 function normalizeCode(v){
   return String(v||"").toUpperCase().trim();
+}
+/* ---- DOB / subject display helpers (profile board + students table) ---- */
+function fmtDob(v){
+  if(v===null||v===undefined||v==="") return "";
+  const pad=n=>String(n).padStart(2,"0");
+  if(v instanceof Date&&!isNaN(v)) return pad(v.getDate())+"-"+pad(v.getMonth()+1)+"-"+v.getFullYear();
+  if(typeof v==="number"||/^\d{5}(\.\d+)?$/.test(String(v).trim())){
+    const n=Number(v);
+    if(n>20000&&n<80000){ const d=new Date(Math.round((n-25569)*86400000)); return pad(d.getUTCDate())+"-"+pad(d.getUTCMonth()+1)+"-"+d.getUTCFullYear(); }
+    return "";
+  }
+  const t=String(v).trim(); let m;
+  if((m=/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/.exec(t))) return pad(m[3])+"-"+pad(m[2])+"-"+m[1];
+  if((m=/^(\d{1,2})[-\/.\s](\d{1,2})[-\/.\s](\d{4})$/.exec(t))) return pad(m[1])+"-"+pad(m[2])+"-"+m[3];
+  if((m=/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2})$/.exec(t))){ const y=+m[3]; return pad(m[1])+"-"+pad(m[2])+"-"+(y>30?1900+y:2000+y); }
+  if((m=/^(\d{1,2})[\s-]([A-Za-z]{3})[A-Za-z]*[\s,-]+(\d{4})$/.exec(t))){
+    const mi=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].indexOf(m[2].toLowerCase());
+    if(mi>=0) return pad(m[1])+"-"+pad(mi+1)+"-"+m[3];
+  }
+  return "";
+}
+/* subject code from a code OR a full name (Bengali -> BNGA) */
+function subjCode(v){
+  const t=normalizeHeader(v); if(!t) return "";
+  for(const c in SUBJECT_ALIASES){ if(normalizeHeader(c)===t||SUBJECT_ALIASES[c].map(normalizeHeader).includes(t)) return c; }
+  return String(v).trim().toUpperCase();
+}
+/* DOB column: header says dob/birth, otherwise the column whose values are mostly dates (wrong header in Excel) */
+function dobColumnKey(){
+  const H=(typeof studentHeaders==="function"?studentHeaders():[]);
+  const keys=Array.from(new Set([...H,...students.flatMap(x=>Object.keys(x))])).filter(k=>k!=="sl");
+  let k=keys.find(x=>/^dob$/.test(normalizeHeader(x))||/birth/.test(normalizeHeader(x)));
+  if(k) return k;
+  let best=null,bestN=0;
+  keys.forEach(x=>{
+    let n=0,t=0; students.forEach(st=>{ const v=st[x]; if(v===""||v==null) return; t++; if(fmtDob(v)){ const y=+fmtDob(v).slice(-4); if(y>=1995&&y<=2015) n++; } });
+    if(t>=3&&n/t>=0.6&&n>bestN){best=x;bestN=n;}
+  });
+  return best;
 }
 // Slot columns are headers like "S-1", "S 2", "S_3", "S6" etc.
 /* Slot columns = headers like S-1..S-6, PLUS any column whose values are mostly subject codes (BNGA, ENGB, PHYS...).
