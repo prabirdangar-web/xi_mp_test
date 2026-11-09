@@ -1564,7 +1564,7 @@ function sbLayout(st){
   });
   /* subject slots S-1..S-6: real S-n headers first, then columns whose values are subject codes but whose header is wrong */
   const slotHdr={}; keys.forEach(k=>{ const m=/^s(\d+)$/.exec(normalizeHeader(k)); if(m&&!used.has(k)){ slotHdr[+m[1]]=k; } });
-  const vkeys=(typeof valueSlotKeys==="function"?valueSlotKeys():[]).filter(k=>keys.includes(k)&&!Object.values(slotHdr).includes(k)&&!used.has(k));
+  const vkeys=(Object.keys(slotHdr).length?[]:(typeof valueSlotKeys==="function"?valueSlotKeys():[])).slice(0,6).filter(k=>keys.includes(k)&&!Object.values(slotHdr).includes(k)&&!used.has(k));
   const slots=[]; let vi=0;
   for(let n=1;n<=6;n++){
     if(slotHdr[n]){ slots.push({n,key:slotHdr[n],fixed:false}); }
@@ -1846,8 +1846,8 @@ function valueSlotKeys(){
 }
 function getSlotKeys(student){
   const hdr=Object.keys(student).filter(k=>/^s\d+$/i.test(normalizeHeader(k)));
-  const extra=valueSlotKeys().filter(k=>k in student && !hdr.includes(k));
-  return hdr.concat(extra);
+  const extra=hdr.length?[]:valueSlotKeys().filter(k=>k in student && !hdr.includes(k)).slice(0,6);
+  return hdr.concat(extra).slice(0,6);
 }
 function findSubjectColumnKey(student,subjectCode){
   const keys=Object.keys(student);
