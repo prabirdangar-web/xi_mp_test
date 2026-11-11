@@ -807,7 +807,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
     <div class="rv-school">Taldangra Fulmati High School [H.S.]</div>
     <div class="rv-title">Class XI — Result View</div>
   </div>
-  <div class="panel">
+  <div class="panel rv-form">
     <div class="toolbar">
       <div class="field"><label>Registration No.</label><input id="rvReg" placeholder="Registration No." autocomplete="off"></div>
       <div class="field"><label>Date of Birth</label><input id="rvDob" type="date"></div>
@@ -818,7 +818,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
     <div class="toolbar">
       <div class="field"><label>Subject</label><select id="rvSub"></select></div>
       <div class="field"><label>Result of</label>
-        <select id="rvExam"><option value="COMB">Combined (Sem I + Sem II + Project/Practical)</option><option value="SEM1">Semester I</option><option value="SEM2">Semester II</option></select></div>
+        <select id="rvExam"><option value="AUTO">Latest available result</option><option value="SEM1">Semester I</option><option value="SEM1S">Semester I + Supplementary</option><option value="COMB">Full Result (Sem I + Sem II + Project/Practical)</option></select></div>
       <button class="btn" id="rvGo">View Result</button>
     </div>
     <div id="rvMsg" class="lockbox" style="display:none"></div>
@@ -831,7 +831,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
     <div class="rv-school">Taldangra Fulmati High School [H.S.]</div>
     <div class="rv-title">Class X — MP (SE) 2027 Selection Test — Result View</div>
   </div>
-  <div class="panel">
+  <div class="panel rv-form">
     <div class="toolbar">
       <div class="field"><label>B.S. Portal ID</label><input id="rvxBs" placeholder="14-digit B.S. ID" autocomplete="off" inputmode="numeric" maxlength="14"></div>
       <div class="field"><label>Date of Birth</label><input id="rvxDob" type="date"></div>
@@ -3911,6 +3911,104 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
 </script>
 
 <script>
+/* ===================== MARKSHEET ENGINE (Class XI + Class X) =====================
+   One professional marksheet design used on screen AND for printing.
+   Printing opens a clean document that contains ONLY the marksheet (no input boxes,
+   no buttons, no portal chrome). */
+(function(){
+  const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const CSS=
+'.ms-wrap{overflow-x:auto}'+
+'.ms{font-family:"Times New Roman",Georgia,"Noto Serif Bengali",serif;color:#111;background:#fff;border:2px solid #1e3a5f;padding:3px;max-width:794px;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+'.ms-in{border:1px solid #1e3a5f;padding:14px 18px;min-width:520px}'+
+'.ms-head{text-align:center;border-bottom:2px solid #1e3a5f;padding-bottom:8px;margin-bottom:8px}'+
+'.ms-school{font-size:20px;font-weight:700;letter-spacing:.5px;color:#1e3a5f;text-transform:uppercase}'+
+'.ms-addr{font-size:11px;color:#333;margin-top:2px}'+
+'.ms-title{display:inline-block;margin-top:8px;padding:3px 18px;border:1px solid #1e3a5f;font-size:13px;font-weight:700;letter-spacing:1px;background:#eef3f9;color:#1e3a5f;text-transform:uppercase}'+
+'.ms-sub{font-size:11px;margin-top:4px;color:#444}'+
+'.ms-id{width:100%;border-collapse:collapse;margin:8px 0 10px;font-size:12px}'+
+'.ms-id td{padding:3px 6px;border:1px solid #9aa9bb;vertical-align:top;text-align:left}'+
+'.ms-id td.l{background:#f3f6fa;font-weight:700;width:17%;white-space:nowrap}'+
+'.ms-tb{width:100%;border-collapse:collapse;font-size:12px}'+
+'.ms-tb th{background:#1e3a5f;color:#fff;padding:5px 4px;border:1px solid #1e3a5f;font-weight:700;text-align:center}'+
+'.ms-tb td{border:1px solid #9aa9bb;padding:5px 5px;text-align:center}'+
+'.ms-tb td.s{text-align:left}'+
+'.ms-tb td small{color:#555;font-size:10px}'+
+'.ms-tb tr.dim td{color:#777;font-style:italic}'+
+'.ms-r-pass{font-weight:700;color:#146c2e}.ms-r-fail{font-weight:700;color:#b42318}.ms-r-aw{color:#777}'+
+'.ms-sum{width:100%;border-collapse:collapse;margin-top:10px;font-size:12.5px}'+
+'.ms-sum td{border:1px solid #9aa9bb;padding:6px 8px;text-align:left}'+
+'.ms-sum td.l{background:#f3f6fa;font-weight:700;width:30%}'+
+'.ms-res{font-size:14px;font-weight:700}'+
+'.ms-notes{font-size:10.5px;color:#333;margin:8px 0 0;padding-left:16px;line-height:1.55;text-align:left}'+
+'.ms-sign{display:flex;justify-content:space-between;margin-top:46px;font-size:11.5px}'+
+'.ms-sign div{text-align:center;border-top:1px solid #333;padding-top:3px;min-width:150px}'+
+'.ms-foot{font-size:10px;text-align:center;color:#555;margin-top:10px}'+
+'.ms-prov{margin-top:8px;padding:4px 8px;border:1px dashed #b45309;color:#92400e;font-size:11px;text-align:center;background:#fffbeb}';
+
+  /* one mark cell: undefined/null -> dash (awaited), 'AB' -> red AB, number (optional supplementary flag) */
+  function cell(v,o){
+    if(v===undefined||v===null||v==='') return '<span class="ms-r-aw">&mdash;</span>';
+    if(v==='AB') return '<b style="color:#b42318">AB</b>';
+    return esc(v)+((o&&o.sup)?'<sup>S</sup>':'');
+  }
+  function resHtml(r){
+    if(r==='PASS') return '<span class="ms-r-pass">PASS</span>';
+    if(r==='FAIL') return '<span class="ms-r-fail">FAIL</span>';
+    if(r==='ABSENT') return '<span class="ms-r-fail">ABSENT</span>';
+    if(r==='AWAITED') return '<span class="ms-r-aw">Awaited</span>';
+    return esc(r||'');
+  }
+  /* o = {title, subtitle, who:[[label,value],...], head:[...], rows:[{name,code,cells:[html..],res,dim,tag}], summary:[[label,html],...], notes:[...], provisional:bool} */
+  function build(o){
+    const who=(o.who||[]).filter(x=>x[1]!==''&&x[1]!==undefined&&x[1]!==null);
+    let idRows='';
+    for(let i=0;i<who.length;i+=2){
+      const a=who[i], b=who[i+1];
+      idRows+='<tr><td class="l">'+esc(a[0])+'</td><td'+(b?'':' colspan="3"')+'>'+esc(a[1])+'</td>'+(b?'<td class="l">'+esc(b[0])+'</td><td>'+esc(b[1])+'</td>':'')+'</tr>';
+    }
+    const head='<tr><th style="width:34px">SL</th><th style="text-align:left">Subject</th>'+(o.head||[]).map(h=>'<th>'+esc(h)+'</th>').join('')+'<th>Result</th></tr>';
+    const body=(o.rows||[]).map((r,i)=>'<tr'+(r.dim?' class="dim"':'')+'><td>'+(i+1)+'</td><td class="s"><b>'+esc(r.name)+'</b>'+(r.code?' <small>('+esc(r.code)+')</small>':'')+(r.tag?'<br><small>'+esc(r.tag)+'</small>':'')+'</td>'+r.cells.map(c=>'<td>'+c+'</td>').join('')+'<td>'+resHtml(r.res)+'</td></tr>').join('');
+    const sum=(o.summary&&o.summary.length)?'<table class="ms-sum">'+o.summary.map(s=>'<tr><td class="l">'+esc(s[0])+'</td><td>'+s[1]+'</td></tr>').join('')+'</table>':'';
+    const notes=(o.notes&&o.notes.length)?'<ol class="ms-notes">'+o.notes.map(n=>'<li>'+esc(n)+'</li>').join('')+'</ol>':'';
+    const today=new Date().toLocaleDateString('en-GB');
+    return '<div class="ms"><div class="ms-in">'+
+      '<div class="ms-head"><div class="ms-school">Taldangra Fulmati High School [H.S.]</div><div class="ms-addr">Taldangra, Bankura, West Bengal</div>'+
+      '<div class="ms-title">'+esc(o.title)+'</div>'+(o.subtitle?'<div class="ms-sub">'+esc(o.subtitle)+'</div>':'')+'</div>'+
+      '<table class="ms-id">'+idRows+'</table>'+
+      '<table class="ms-tb"><thead>'+head+'</thead><tbody>'+body+'</tbody></table>'+
+      sum+(o.provisional?'<div class="ms-prov">PROVISIONAL &mdash; marks of some subjects are not yet finalised by the school.</div>':'')+notes+
+      '<div class="ms-sign"><div>Class Teacher</div><div>Head of the Institution<br>(with seal)</div></div>'+
+      '<div class="ms-foot">Computer-generated statement of marks &bull; Date of issue: '+today+' &bull; Not valid without the signature and seal of the Head of the Institution.</div>'+
+      '</div></div>';
+  }
+  /* Print ONLY the marksheet. New tab first; hidden iframe if the browser blocks pop-ups. */
+  function print(html,title){
+    const doc='<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+esc(title||'Marksheet')+'</title><style>'+CSS+
+      '@page{size:A4 portrait;margin:10mm}html,body{margin:0;padding:0;background:#fff}body{padding:0}.ms{max-width:none}.ms-in{min-width:0}.ms-wrap{overflow:visible}</style></head><body>'+html+'</body></html>';
+    let w=null; try{ w=window.open('','_blank'); }catch(e){}
+    if(w&&w.document){
+      w.document.open(); w.document.write(doc); w.document.close();
+      setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} },400);
+      return;
+    }
+    const f=document.createElement('iframe');
+    f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+    document.body.appendChild(f);
+    const d=f.contentWindow.document; d.open(); d.write(doc); d.close();
+    setTimeout(()=>{ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){} setTimeout(()=>f.remove(),3000); },400);
+  }
+  const st=document.createElement('style'); st.textContent=CSS+
+    '.rv-stages{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px;font-size:12px}'+
+    '.rv-stages span{padding:4px 10px;border-radius:999px;border:1px solid #cbd5e1;background:#f8fafc;color:#475569}'+
+    '.rv-stages span.on{background:#dcfce7;border-color:#86efac;color:#166534;font-weight:700}'+
+    '@media print{body.result-only .rv-form,body.result-only #rvMsg,body.result-only #rvxMsg,body.result-only .rv-stages,body.result-only .rv-head,body.result-only .noprint{display:none!important}body.result-only .panel{border:0!important;box-shadow:none!important;padding:0!important;margin:0!important}body.result-only .content{padding:0!important;max-width:none!important}}';
+  document.head.appendChild(st);
+  window.TFHS_MS={build,print,cell,css:CSS};
+})();
+</script>
+
+<script>
 /* ===================== RESULT VIEW LINKS =====================
    Link: index.html?m=result&sub=CODE | CODE1,CODE2 | *      (optional &exam=COMB|SEM1|SEM2)
    Opens ONLY a result window: student enters Registration No., picks subject, sees result.
@@ -3983,7 +4081,7 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
     const box=document.createElement('div'); box.className='panel ml-panel';
     box.innerHTML='<h3 style="margin:0 0 6px">🎓 Result View Link — send to students</h3>'+
       '<div class="subtitle" style="margin-bottom:8px">The link opens ONLY the result window. The student must enter at least two of: Registration No., Date of Birth, Banglar Siksha ID, Roll No., then selects a subject. Only locked marks are shown.</div>'+
-      '<div class="toolbar"><div class="field"><label>Default result type</label><select class="rl-exam"><option value="">Student chooses</option><option value="COMB">Combined</option><option value="SEM1">Semester I</option><option value="SEM2">Semester II</option></select></div>'+
+      '<div class="toolbar"><div class="field"><label>Result stage on link</label><select class="rl-exam"><option value="">Latest available (recommended)</option><option value="SEM1">Semester I only</option><option value="SEM1S">Semester I + Supplementary</option><option value="COMB">Full Result</option></select></div>'+
       '<button class="btn rl-gen">Build Link</button></div><div class="rl-out" style="margin-top:8px"></div>';
     host.appendChild(box);
     box.querySelector('.rl-gen').onclick=()=>{
@@ -3996,7 +4094,7 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
         const all=out.querySelector('.rl-all').checked, picked=[...out.querySelectorAll('.rl-chk:checked')].map(x=>x.value);
         const ex=box.querySelector('.rl-exam').value, u=(all||!picked.length)?mkLink('*',ex):mkLink(picked.join(','),ex);
         out.querySelector('.rl-url').value=u; out.querySelector('.rl-open').href=u;
-        const m='নমস্কার,\n\nTFHS Class XI-এর রেজাল্ট দেখতে নিচের লিঙ্কটি খুলুন। রেজিস্ট্রেশন নম্বর, জন্মতারিখ, Banglar Siksha ID বা রোল নম্বর — যেকোনো অন্তত দুটি লিখে বিষয় বেছে "View Result" চাপুন।\n\nলিঙ্ক: '+u+'\n\nধন্যবাদ।\nপ্রধান শিক্ষক, Taldangra Fulmati High School [H.S.]';
+        const m='নমস্কার,\n\nTFHS Class XI-এর রেজাল্ট দেখতে নিচের লিঙ্কটি খুলুন। রেজিস্ট্রেশন নম্বর, জন্মতারিখ, Banglar Siksha ID বা রোল নম্বর — যেকোনো অন্তত দুটি লিখে বিষয় বেছে "View Result" চাপুন।\n\nরেজাল্ট ধাপে ধাপে প্রকাশিত হবে: প্রথমে Semester I; Supplementary-র নম্বর জমা হলে তা যুক্ত হবে; Semester II-এর সব নম্বর জমা হলে "Full Result" দেখা যাবে।\n\nলিঙ্ক: '+u+'\n\nধন্যবাদ।\nপ্রধান শিক্ষক, Taldangra Fulmati High School [H.S.]';
         out.querySelector('.rl-wa').href='https://wa.me/?text='+encodeURIComponent(m);
       };
       out.querySelectorAll('input[type=checkbox]').forEach(x=>x.onchange=()=>{
@@ -4022,7 +4120,7 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
   const preExam=(P.get('exam')||'').toUpperCase();
   const $=id=>document.getElementById(id);
   const msg=(t,ok)=>{const m=$('rvMsg'); m.style.display=t?'block':'none'; m.className='lockbox'+(ok?' ok':''); m.textContent=t||'';};
-  if(['COMB','SEM1','SEM2'].includes(preExam)){ $('rvExam').value=preExam; $('rvExam').closest('.field').style.display='none'; }
+  if(['AUTO','SEM1','SEM1S','COMB'].includes(preExam)){ $('rvExam').value=preExam; $('rvExam').closest('.field').style.display='none'; }
 
   let cfgDone=false;
   async function ready(){
@@ -4050,7 +4148,12 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
 
   const pm=m=>Math.ceil(m*0.30);
   function val(r,f){ if(!r) return undefined; const v=r[f]; return (v===''||v===undefined||v===null)?'AB':(Number(v)||0); }
-  const show=v=>v===undefined?'<span style="color:#94a3b8">Awaited</span>':(v==='AB'?'<b style="color:#b91c1c">AB</b>':v);
+  const nAB=v=>(v==='AB'||v===undefined)?0:v;
+  /* Traditional order: 1st language, 2nd language, then electives (science group first, then humanities) */
+  const XI_ORDER=['BNGA','SANT','ENGB','PHYS','CHEM','MATH','BIOS','COMS','COMA','HIST','GEGR','PHIL','POLS','SNSK'];
+  const ordIdx=c=>{ const i=XI_ORDER.indexOf(c); return i<0?99:i; };
+  const LANGS=['BNGA','SANT','ENGB'];
+  let lastHtml='', lastTitle='';
 
   async function go(){
     const q={reg:$('rvReg').value.trim().toUpperCase(),dob:normDob($('rvDob').value),bs:normBs($('rvBs').value),roll:$('rvRoll').value.trim().toUpperCase()};
@@ -4067,44 +4170,111 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
         (!q.roll||getRoll(s)===q.roll));
       if(!hits.length){ msg('No matching record found. Please check the details you entered. If your Date of Birth or Banglar Siksha ID is not on record, contact the school.'); return; }
       if(hits.length>1){ msg('More than one student matches. Please fill in one more detail (for example Registration No.).'); return; }
-      const st=hits[0];
-      const mode=$('rvExam').value, choice=$('rvSub').value;
-      const pool=(choice==='*'?allowed():[choice]).filter(c=>studentTakesSubject(st,c));
+      const st=hits[0], choice=$('rvSub').value;
+      const pool=(choice==='*'?allowed():[choice]).filter(c=>studentTakesSubject(st,c)).sort((a,b)=>ordIdx(a)-ordIdx(b)||a.localeCompare(b));
       if(!pool.length){ msg('You are not enrolled in the selected subject(s).'); return; }
-      const exams=mode==='SEM1'?['SEM1']:mode==='SEM2'?['SEM2']:['SEM1','SEM2'];
-      const jobs=[]; pool.forEach(c=>exams.forEach(e=>jobs.push([c,e])));
+
+      /* ---- load Sem I, Supplementary and Sem II (locked sheets only) ---- */
+      const jobs=[]; pool.forEach(c=>['SEM1','SUPP','SEM2'].forEach(e=>jobs.push([c,e])));
       const res=await Promise.all(jobs.map(([c,e])=>fetchMarksMerged(e,c)));
-      const k=studentKey(st), got={};
-      jobs.forEach(([c,e],i)=>{ got[c]=got[c]||{}; got[c][e]=res[i].lockedRows.find(r=>studentKey(r.student)===k); });
-      const head=mode==='SEM1'?['Sem I Theory']:mode==='SEM2'?['Sem II Theory','Practical / Project']:['Sem I Theory','Sem II Theory','Practical / Project'];
-      let pending=0;
-      const rows=pool.map(c=>{
-        const sc=SCHEMES[c], cm=sc.practical||sc.project, r1=got[c].SEM1, r2=got[c].SEM2;
-        let cols,total=null,result='';
-        if(mode==='SEM1'){
-          const a=val(r1,'theory'); cols=[a];
-          if(a===undefined) pending++; else if(a==='AB') result='ABSENT'; else{ total=a; result=a>=pm(sc.theory)?'PASS':'FAIL'; }
-        }else if(mode==='SEM2'){
-          const a=val(r2,'theory'), b=val(r2,'component'); cols=[a,b];
-          if(a===undefined) pending++; else if(a==='AB'&&b==='AB') result='ABSENT';
-          else{ const x=a==='AB'?0:a,y=b==='AB'?0:b; total=x+y; result=(x>=pm(sc.theory)&&y>=pm(cm))?'PASS':'FAIL'; }
+      const k=studentKey(st), D={};
+      jobs.forEach(([c,e],i)=>{ D[c]=D[c]||{}; D[c][e]=res[i].lockedRows.find(r=>studentKey(r.student)===k); if(e==='SUPP') D[c].suppSheet=res[i].lockedRows.length>0; });
+      const s1=pool.every(c=>D[c].SEM1), s2=pool.every(c=>D[c].SEM2), s2any=pool.some(c=>D[c].SEM2);
+      const sp=pool.some(c=>D[c].suppSheet);
+      const fullReady=s1&&s2;
+
+      /* ---- which stage to show ---- */
+      let want=$('rvExam').value; if(!['SEM1','SEM1S','COMB'].includes(want)) want='AUTO';
+      let mode=want==='AUTO'?(fullReady?'COMB':(sp?'SEM1S':'SEM1')):want;
+      let note='';
+      if(mode==='COMB'&&!fullReady){ note='Full Result is not available yet — it opens when the finalised marks of Semester I and Semester II of all your subjects are available. Showing the latest available result.'; mode=sp?'SEM1S':'SEM1'; }
+      if(mode==='SEM1S'&&!sp){ note='Supplementary marks are not published yet. Showing the Semester I result.'; mode='SEM1'; }
+      const useSupp=(mode!=='SEM1');
+
+      /* ---- per-subject marks (Supplementary replaces a failed / absent Sem I theory mark) ---- */
+      const rowsD=pool.map(c=>{
+        const sc=SCHEMES[c], th=sc.theory, cm=sc.practical||sc.project;
+        const r1=D[c].SEM1, rs=D[c].SUPP, r2=D[c].SEM2;
+        let a=val(r1,'theory'), sup=false;
+        if(useSupp&&rs){ const s=val(rs,'theory'); if(s!==undefined&&s!=='AB'&&(a===undefined||a==='AB'||a<pm(th))){ a=s; sup=true; } }
+        const o={c,name:XI_NAMES[c]||c,th,cm,a,sup,lang:LANGS.includes(c)};
+        if(mode!=='COMB'){
+          o.fm=th;
+          if(a===undefined) o.state='P'; else if(a==='AB') o.state='A';
+          else{ o.state='M'; o.t=a; o.ok=a>=pm(th); }
         }else{
-          const a=val(r1,'theory'), b=val(r2,'theory'), x=val(r2,'component'); cols=[a,b,x];
-          if(a===undefined||b===undefined) pending++;
-          else if(a==='AB'&&b==='AB'&&x==='AB') result='ABSENT';
-          else{ const n=v=>v==='AB'?0:v; total=n(a)+n(b)+n(x); result=(n(a)>=pm(sc.theory)&&n(b)>=pm(sc.theory)&&n(x)>=pm(cm))?'PASS':'FAIL'; }
+          const b=val(r2,'theory'), x=val(r2,'component'); o.b=b; o.x=x; o.fm=th*2+cm;
+          if(a===undefined||b===undefined) o.state='P';
+          else if(a==='AB'&&b==='AB'&&x==='AB') o.state='A';
+          else{ o.state='M'; o.t=nAB(a)+nAB(b)+nAB(x); o.ok=nAB(a)>=pm(th)&&nAB(b)>=pm(th)&&nAB(x)>=pm(cm); }
         }
-        const fm=mode==='SEM1'?sc.theory:mode==='SEM2'?sc.theory+cm:sc.theory*2+cm;
-        const badge=result?'<span class="badge '+(result==='PASS'?'pass':'fail')+'">'+result+'</span>':'<span style="color:#94a3b8">Awaited</span>';
-        return '<tr><td style="text-align:left"><b>'+esc(c)+'</b>'+(XI_NAMES[c]?'<br><small style="color:#64748b">'+esc(XI_NAMES[c])+'</small>':'')+'</td>'+cols.map(v=>'<td>'+show(v)+'</td>').join('')+'<td><b>'+(total===null?'—':total)+'</b> / '+fm+'</td><td>'+badge+'</td></tr>';
-      }).join('');
-      const nm=String(getStudentName(st)||'');
-      const label=mode==='SEM1'?'Semester I':mode==='SEM2'?'Semester II':'Combined';
-      $('rvOut').innerHTML='<div class="panel"><div class="rv-who"><b>'+esc(nm)+'</b><br>Registration No.: '+esc(getStudentReg(st))+' &nbsp;|&nbsp; Roll: '+esc(getStudentRoll(st))+' &nbsp;|&nbsp; Sex: '+esc(getStudentSex(st))+'<br>Result: '+label+'</div>'+
-        '<div class="tablewrap" style="margin-top:0"><table style="min-width:420px"><thead><tr><th>Subject</th>'+head.map(h=>'<th>'+h+'</th>').join('')+'<th>Total</th><th>Result</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
-        '<div class="rv-note">AB = Absent. "Awaited" = marks not yet finalised by the school. Only finalised (locked) marks are shown. For official results refer to the school.</div>'+
-        '<div class="toolbar noprint" style="margin-top:10px"><button class="btn secondary" onclick="window.print()">Print</button></div></div>';
-      msg(pending?'Some subjects are still awaiting finalised marks.':'');
+        return o;
+      });
+
+      /* ---- WBCHSE best-of-five: 2 languages + best 3 electives; 6th subject is additional (not counted); 30% in each counted subject ---- */
+      const anyP=rowsD.some(o=>o.state==='P');
+      const wantOverall=(choice==='*'&&pool.length>1);
+      let counted=null, overall=null, t5=0, fm5=0, need=[];
+      if(wantOverall){
+        const L=rowsD.filter(o=>o.lang), E=rowsD.filter(o=>!o.lang);
+        const best=E.filter(o=>o.state==='M').sort((p,q2)=>((q2.ok?1:0)-(p.ok?1:0))||(q2.t-p.t)).slice(0,3);
+        const cs=new Set(L.concat(E.length>3?best:E).map(o=>o.c));
+        if(!anyP) counted=cs;
+        const cr=rowsD.filter(o=>cs.has(o.c));
+        t5=cr.filter(o=>o.state==='M').reduce((s,o)=>s+o.t,0); fm5=cr.reduce((s,o)=>s+o.fm,0);
+        const langBad=L.some(o=>o.state==='M'&&!o.ok), langAbs=L.some(o=>o.state==='A');
+        const elBad=E.length>3?best.filter(o=>!o.ok).length>0||best.length<3:E.some(o=>o.state==='M'&&!o.ok);
+        const elAbs=cr.some(o=>!o.lang&&o.state==='A');
+        if(anyP) overall='AWAITED';
+        else if(langBad||elBad) overall='FAIL';
+        else if(langAbs||elAbs) overall='ABSENT';
+        else overall='PASS';
+        if(!anyP) need=cr.filter(o=>o.state==='A'||(o.state==='M'&&!o.ok)).map(o=>o.c);
+      }
+
+      /* ---- build the marksheet ---- */
+      const MS=window.TFHS_MS, rows=rowsD.map(o=>{
+        const dim=!!(counted&&!counted.has(o.c));
+        const resTxt=o.state==='P'?'AWAITED':o.state==='A'?'ABSENT':(o.ok?'PASS':'FAIL');
+        const cells=mode==='COMB'
+          ? [MS.cell(o.a,{sup:o.sup}),MS.cell(o.b),MS.cell(o.x),(o.state==='M'?'<b>'+o.t+'</b>':'&mdash;'),o.fm]
+          : [o.fm,pm(o.th),MS.cell(o.a,{sup:o.sup})];
+        return {name:o.name,code:o.c,cells,res:resTxt,dim,tag:dim?'Additional subject — not counted in Best of Five':''};
+      });
+      const label=mode==='SEM1'?'SEMESTER I':mode==='SEM1S'?'SEMESTER I (WITH SUPPLEMENTARY)':'FULL RESULT (SEMESTER I + SEMESTER II)';
+      const medium=studentTakesSubject(st,'SANT')?'Santali':'Bengali';
+      const father=String(fieldBy(st,k2=>k2.includes('father')||k2.includes('guardian'))||'').trim();
+      const summary=[];
+      if(wantOverall){
+        summary.push(['Grand Total (Best of Five)',anyP?'<span class="ms-r-aw">Awaited</span>':'<b>'+t5+'</b> out of <b>'+fm5+'</b>']);
+        summary.push(['Percentage',anyP?'<span class="ms-r-aw">Awaited</span>':'<b>'+(fm5?(t5/fm5*100).toFixed(2):'0.00')+' %</b>']);
+        summary.push(['Result','<span class="ms-res">'+(overall==='AWAITED'?'<span class="ms-r-aw">Awaited</span>':overall==='PASS'?'<span class="ms-r-pass">PASSED</span>':overall==='ABSENT'?'<span class="ms-r-fail">ABSENT</span>':'<span class="ms-r-fail">NOT PASSED</span>')+'</span>']);
+      }
+      const names=l=>l.map(c=>XI_NAMES[c]||c).join(', ');
+      const notes=[];
+      notes.push('Result follows the WBCHSE Class XI Semester System: Best of Five — two languages and best three electives; a 6th subject is optional and is not counted.');
+      notes.push(mode==='COMB'?'Minimum 30% is required separately in Semester I theory, Semester II theory and Practical/Project of each of the five counted subjects.':'Minimum 30% of the Semester I theory marks is required in each of the five counted subjects.');
+      if(rowsD.some(o=>o.sup)) notes.push('S — marks obtained in the Semester I Supplementary Examination (replaces the earlier Semester I mark).');
+      if(mode==='SEM1'&&need.length) notes.push('Not yet cleared: '+names(need)+'. You may appear in the Semester I Supplementary Examination held along with Semester II.');
+      if(mode==='SEM1S'&&need.length) notes.push('Still not cleared after Supplementary: '+names(need)+'.');
+      if(mode==='COMB'&&overall==='FAIL') notes.push('As per Regulation 8, a candidate who could not clear any subject may appear in the Supplementary Examination as notified by the school/Council.');
+      notes.push('AB = Absent. Only finalised (locked) marks are shown. For official results refer to the school.');
+      const html=MS.build({
+        title:'Class XI — '+label,
+        who:[['Name of Candidate',String(getStudentName(st)||'')],['Registration No.',String(getStudentReg(st)||'')],['Roll No.',String(getStudentRoll(st)||'')],['Banglar Siksha ID',getBs(st)],['Sex',String(getStudentSex(st)||'')],['Date of Birth',getDob(st)],["Father's Name",father],['Medium',medium]],
+        head:mode==='COMB'?['Sem I Th.','Sem II Th.','Pr. / Pj.','Total','F.M.']:['Full Marks','Pass Marks','Marks Obtained'],
+        rows,summary,notes,provisional:anyP
+      });
+      lastHtml=html; lastTitle='Class XI '+label+' — '+String(getStudentName(st)||'');
+
+      /* ---- stage tracker + actions (screen only) ---- */
+      const chip=(on,t)=>'<span class="'+(on?'on':'')+'">'+(on?'✔ ':'⏳ ')+t+'</span>';
+      const stages='<div class="rv-stages noprint">'+chip(s1,'Semester I')+chip(sp,'Supplementary')+chip(s2,'Semester II'+(s2any&&!s2?' (partial)':''))+chip(fullReady,'Full Result')+'</div>';
+      const fullBtn=(fullReady&&mode!=='COMB')?'<button class="btn" id="rvFull">View Full Result</button> ':(!fullReady?'<button class="btn secondary" disabled title="Opens when Semester II marks of all subjects are finalised">Full Result — awaiting Semester II</button> ':'');
+      $('rvOut').innerHTML='<div class="panel">'+stages+'<div class="ms-wrap">'+html+'</div><div class="toolbar noprint" style="margin-top:12px">'+fullBtn+'<button class="btn secondary" id="rvPrint">🖨 Print Marksheet</button></div></div>';
+      $('rvPrint').onclick=()=>MS.print(lastHtml,lastTitle);
+      const fb=$('rvFull'); if(fb) fb.onclick=()=>{ $('rvExam').value='COMB'; go(); };
+      msg(note||(anyP?'Some subjects are still awaiting finalised marks.':''),false);
     }catch(e){ msg('Could not load result: '+e.message); }
     finally{ $('rvGo').disabled=false; }
   }
@@ -4303,25 +4473,39 @@ function parseListPages(pages){
         if(!hits.length){ msg('No matching record found. Please check the details you entered. If your Date of Birth is not on record, contact the school.'); return; }
         if(hits.length>1){ msg('More than one student matches. Please fill in one more detail (for example Section).'); return; }
         const st=hits[0], lang=langX(st), choice=$('rvxSub').value;
-        const pool=(choice==='*'?codes():[choice]).filter(c=>!((c==='BNGA'||c==='SANT')&&c!==lang));
+        /* Traditional order: 1st language, 2nd language, science group (Maths, Physical Science, Life Science), then History, Geography */
+        const ORD=['BNGA','SANT','ENGB','MATH','PHYS','BIOS','HIST','GEGR'];
+        const oi=c=>{ const i=ORD.indexOf(c); return i<0?99:i; };
+        const pool=(choice==='*'?codes():[choice]).filter(c=>!((c==='BNGA'||c==='SANT')&&c!==lang)).sort((a,b)=>oi(a)-oi(b)||a.localeCompare(b));
         if(!pool.length){ msg('You are not enrolled in the selected subject.'); return; }
         const snaps=await Promise.all(pool.map(c=>db.collection('mpMarks').doc(c+'_MP-SE-2027').get()));
         const k=keyX(st); let pending=0, grand=0, fails=0, absn=0;
+        const MS=window.TFHS_MS;
         const rows=pool.map((c,i)=>{
           const d=snaps[i], ok=d.exists&&d.data().locked;
           const r=ok?(d.data().rows||[]).find(x=>keyX(x.student)===k):null;
-          if(!r){ pending++; return '<tr><td style="text-align:left"><b>'+esc(prog[c])+'</b></td><td>'+show(undefined)+'</td><td>'+show(undefined)+'</td><td>—</td><td><span style="color:#94a3b8">Awaited</span></td></tr>'; }
-          if(r.absent){ absn++; return '<tr><td style="text-align:left"><b>'+esc(prog[c])+'</b></td><td>'+show('AB')+'</td><td>'+show('AB')+'</td><td>—</td><td><span class="badge fail">ABSENT</span></td></tr>'; }
+          if(!r){ pending++; return {name:prog[c],code:c,cells:[MS.cell(undefined),MS.cell(undefined),'&mdash;',100],res:'AWAITED'}; }
+          if(r.absent){ absn++; return {name:prog[c],code:c,cells:[MS.cell('AB'),MS.cell('AB'),'&mdash;',100],res:'ABSENT'}; }
           const w=Number(r.written)||0, f=Number(r.ife)||0, t=w+f, pass=t>=25; grand+=t; if(!pass) fails++;
-          return '<tr><td style="text-align:left"><b>'+esc(prog[c])+'</b></td><td>'+w+'</td><td>'+f+'</td><td><b>'+t+'</b> / 100</td><td><span class="badge '+(pass?'pass':'fail')+'">'+(pass?'PASS':'FAIL')+'</span></td></tr>';
-        }).join('');
-        const done=pool.length-pending;
-        const overall=pending?'<span style="color:#94a3b8">Awaited</span>':(absn?'<span class="badge fail">ABSENT IN '+absn+' SUBJECT(S)</span>':'<span class="badge '+(fails?'fail':'pass')+'">'+(fails?'FAIL':'PASS')+'</span>');
-        $('rvxOut').innerHTML='<div class="panel"><div class="rv-who"><b>'+esc(nameX(st))+'</b><br>B.S. Portal ID: '+esc(normBs(regX(st)))+' &nbsp;|&nbsp; Class X-'+esc(secX(st))+' &nbsp;|&nbsp; Roll: '+esc(rollX(st))+'</div>'+
-          '<div class="tablewrap" style="margin-top:0"><table style="min-width:420px"><thead><tr><th>Subject</th><th>Written / 90</th><th>IFE / 10</th><th>Total</th><th>Result</th></tr></thead><tbody>'+rows+
-          (choice==='*'&&pool.length>1?'<tr style="background:#f1f5f9;font-weight:700"><td style="text-align:left">GRAND TOTAL ('+done+' of '+pool.length+' subjects)</td><td></td><td></td><td>'+grand+' / '+(done*100)+'</td><td>'+overall+'</td></tr>':'')+
-          '</tbody></table></div><div class="rv-note">AB = Absent. "Awaited" = marks not yet finalised by the school. Only finalised (locked) marks are shown. Pass mark: 25 out of 100 in each subject. For official results refer to the school.</div>'+
-          '<div class="toolbar noprint" style="margin-top:10px"><button class="btn secondary" onclick="window.print()">Print</button></div></div>';
+          return {name:prog[c],code:c,cells:[w,f,'<b>'+t+'</b>',100],res:pass?'PASS':'FAIL'};
+        });
+        const done=pool.length-pending, multi=(choice==='*'&&pool.length>1);
+        const summary=[];
+        if(multi){
+          summary.push(['Grand Total',pending?'<span class="ms-r-aw">Awaited</span>':'<b>'+grand+'</b> out of <b>'+(done*100)+'</b>']);
+          summary.push(['Percentage',pending?'<span class="ms-r-aw">Awaited</span>':'<b>'+(done?(grand/(done*100)*100).toFixed(2):'0.00')+' %</b>']);
+          summary.push(['Result','<span class="ms-res">'+(pending?'<span class="ms-r-aw">Awaited</span>':absn?'<span class="ms-r-fail">ABSENT IN '+absn+' SUBJECT(S)</span>':fails?'<span class="ms-r-fail">NOT PASSED</span>':'<span class="ms-r-pass">PASSED</span>')+'</span>']);
+        }
+        const html=MS.build({
+          title:'Class X — MP (SE) 2027 Selection Test',
+          who:[['Name of Candidate',String(nameX(st)||'')],['B.S. Portal ID',normBs(regX(st))],['Class / Section','X-'+secX(st)],['Roll No.',String(rollX(st)||'')],['Date of Birth',dobX(st)],['1st Language',lang==='SANT'?'Santali':'Bengali']],
+          head:['Written (90)','IFE (10)','Total','F.M.'],
+          rows,summary,provisional:pending>0,
+          notes:['Each subject: Written 90 + IFE (Internal Formative Evaluation) 10 = Full Marks 100. Pass mark: 25 out of 100 in each subject.','AB = Absent. Only finalised (locked) marks are shown. For official results refer to the school.']
+        });
+        const title='Class X MP (SE) 2027 — '+String(nameX(st)||'');
+        $('rvxOut').innerHTML='<div class="panel"><div class="ms-wrap">'+html+'</div><div class="toolbar noprint" style="margin-top:12px"><button class="btn secondary" id="rvxPrint">🖨 Print Marksheet</button></div></div>';
+        $('rvxPrint').onclick=()=>MS.print(html,title);
         msg(pending?'Some subjects are still awaiting finalised marks.':'');
       }catch(e){ msg('Could not load result: '+e.message); }
       finally{ $('rvxGo').disabled=false; }
