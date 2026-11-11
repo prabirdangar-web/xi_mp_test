@@ -306,6 +306,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
     <button data-mpview="mp_result" onclick="MP.showView('mp_result',this)">🏆 Result</button>
     <button data-mpview="mp_tabulation" onclick="MP.showView('mp_tabulation',this)">📋 Tabulation &amp; Rank</button>
     <button data-mpview="mp_analysis" onclick="MP.showView('mp_analysis',this)">📊 Analysis</button>
+    <button data-mpview="mp_bulk" style="display:none" onclick="MP.showView('mp_bulk',this)">🖨 Bulk Marksheets — Sec-wise (Admin)</button>
     <button data-mpview="mp_programme" style="display:none" onclick="MP.showView('mp_programme',this)">⚙️ Programme (Admin)</button>
   </div>
 
@@ -1045,6 +1046,29 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
   <div class="panel">
     <div class="toolbar"><div class="field" style="flex:1"><label>Search</label><input id="mp_studentSearch" placeholder="B.S. Portal ID / Roll / Name" oninput="MP.renderStudents()"></div></div>
     <div class="tablewrap"><table><thead id="mp_studentHead"></thead><tbody id="mp_studentBody"></tbody></table></div>
+  </div>
+</section>
+
+<section id="mp_bulk" class="view">
+  <div class="title">Bulk Marksheets — Section-wise (Admin)</div>
+  <div class="subtitle">Class X MP (SE) 2027 — one marksheet per student on its own A4 page. Section A = Bengali medium, Section B = Santali medium. Uses locked marks only.</div>
+  <div class="panel">
+    <div class="toolbar">
+      <div class="field"><label>Section</label>
+        <select id="mp_bSec"><option value="A">A — Bengali medium</option><option value="B">B — Santali medium</option><option value="ALL">Both sections (A, B)</option><option value="OTHER">Other / unlisted section</option></select></div>
+      <div class="field"><label>Roll from</label><input id="mp_bFrom" style="width:100px" placeholder="optional"></div>
+      <div class="field"><label>Roll to</label><input id="mp_bTo" style="width:100px" placeholder="optional"></div>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="mp_bDone" checked> Only students with complete marks</label>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="mp_bRank" checked> Show Rank in Section (PASS only)</label>
+      <button class="btn" onclick="MP.bulkGenerate()">Generate</button>
+      <button class="btn secondary" onclick="MP.bulkPrintAll()">Print All (A4 Portrait)</button>
+    </div>
+    <div id="mp_bBox" class="lockbox">Click Generate to prepare the marksheets.</div>
+  </div>
+  <div class="panel" id="mp_bSumPanel" style="display:none"><div class="tablewrap"><table><thead><tr><th>Section</th><th>Students</th><th>Pass</th><th>Fail / Absent</th><th>Marks awaited</th><th>Marksheets to print</th></tr></thead><tbody id="mp_bSumBody"></tbody></table></div></div>
+  <div class="panel" id="mp_bPrevPanel" style="display:none">
+    <div class="toolbar"><div class="field" style="flex:1;min-width:240px"><label>Preview student</label><select id="mp_bPrev" onchange="MP.bulkPreview()"></select></div></div>
+    <div id="mp_bPrevBox" class="ms-wrap"></div>
   </div>
 </section>
 
@@ -2258,10 +2282,9 @@ function printSignatureSheet(){
     uppercase:true,
     tallRows:true,
     headerLines:[
-      `<div class="school">Taldangra Fulmati High School [H.S.]</div>`,
+      schoolHdrHtml(true),
       `<div class="exam">XI-2026 Annual Examination — Attendance / Signature Sheet</div>`,
       `<div class="meta"><span><b>Subject:</b> ${escapeHtml(subject)}</span><span><b>Date:</b> ${escapeHtml(date)}</span><span><b>Class:</b> XI</span></div>`,
-      `<div class="meta"><span><b>School Name:</b> Taldangra Fulmati High School [H.S.]</span><span><b>H.S. Code:</b> 114071</span></div>`
     ],
     columns:["SL","Registration No.","Name","Sex","Signature of Student"],
     rowsHtml,
@@ -2563,7 +2586,7 @@ function printMarksEntrySheet(){
   openPrintWindow({
     docTitle:`Marks Entry Sheet - ${subject} - ${examLabel}`,
     headerLines:[
-      `<div class="school">Taldangra Fulmati High School [H.S.]</div>`,
+      schoolHdrHtml(true),
       `<div class="exam">XI-2026 Annual Examination — Marks Entry Sheet</div>`,
       `<div class="meta"><span><b>Subject:</b> ${escapeHtml(subject)}${(pmed||psg)?" ("+[medLabel(pmed),sgLabel(psg)].filter(Boolean).join(", ")+")":""}</span><span><b>Examination:</b> ${examLabel}</span><span><b>Date:</b> ${escapeHtml(date)}</span><span><b>Class:</b> XI</span></div>`
     ],
@@ -2583,7 +2606,7 @@ function openPrintWindow({docTitle,headerLines,columns,rowsHtml,footerLines,orie
   const w=window.open("","_blank");
   if(!w){ alert("Please allow pop-ups to print this sheet."); return; }
   const headerHtml=headerLines.join("");
-  const footerHtml=footerLines.join("");
+  const footerHtml=footerLines.join("")+schoolFootHtml();
   const colCount=columns.length;
   w.document.write(`
     <html>
@@ -2603,6 +2626,7 @@ function openPrintWindow({docTitle,headerLines,columns,rowsHtml,footerLines,orie
         .doc-header .exam{font-size:13px;font-weight:700;margin-top:2px}
         .doc-header .meta{font-size:12px;margin-top:6px;display:flex;justify-content:center;gap:22px;flex-wrap:wrap}
         .doc-footer{border:0;padding-top:0}
+        .doc-footer .pf{text-align:center;font-size:9px;color:#555;margin-top:8px;font-weight:400;text-transform:none}
         .doc-footer .sigline{display:flex;justify-content:space-between;padding-top:30px;font-size:12px;font-weight:600}
         .sigcell{min-width:110px;height:32px}
         ${uppercase?`body{text-transform:uppercase}`:""}
@@ -3373,7 +3397,7 @@ const AttSum={
     const t=document.getElementById(p+"Table").outerHTML;
     const ab=res.abs.map(a=>`<p style="font-size:11px"><b>${escapeHtml(a.name)}</b> (${escapeHtml(a.date||"")}) — ${a.list.length} absent: ${a.list.map(escapeHtml).join("; ")}</p>`).join("");
     const w=window.open("","_blank");
-    w.document.write(`<html><head><title>Attendance Summary</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;padding:8px}h2,h3{text-align:center;margin:3px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #333;padding:4px;font-size:10px;text-align:center}th{background:#eee}</style></head><body><h2>TALDANGRA FULMATI HIGH SCHOOL [H.S.]</h2><h3>${p==="xas"?"CLASS XI SEMESTER EXAM":"CLASS X — MP (SE) 2027 SELECTION TEST"} — ATTENDANCE SUMMARY (SUBJECT-WISE)</h3>${t}<h4>Absentees</h4>${ab||"<p>No absentees recorded.</p>"}</body></html>`);
+    w.document.write(`<html><head><title>Attendance Summary</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;padding:8px}h2,h3{text-align:center;margin:3px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #333;padding:4px;font-size:10px;text-align:center}th{background:#eee}</style></head><body><h2>${escapeHtml(String(TFHS_SCHOOL.name).toUpperCase())}</h2><p style="text-align:center;font-size:10px;margin:0">${escapeHtml(schoolSubText(p==="xas"))}</p><h3>${p==="xas"?"CLASS XI SEMESTER EXAM":"CLASS X — MP (SE) 2027 SELECTION TEST"} — ATTENDANCE SUMMARY (SUBJECT-WISE)</h3>${t}<h4>Absentees</h4>${ab||"<p>No absentees recorded.</p>"}${schoolFootHtml().replace("class=\"pf\"","style=\"text-align:center;font-size:9px;color:#555;margin-top:8px\"")}</body></html>`);
     w.document.close();w.print();
   },
   excel(p){
@@ -3498,11 +3522,14 @@ function printElement(bodyId,title){
         th,td{border:1px solid #999;padding:7px}
         th{background:#eee}
         .noprint{display:none}
+        .school{font-size:17px;font-weight:800}.meta{font-size:11px}.pf{font-size:9px;color:#555;text-align:center;margin-top:10px}
       </style>
     </head>
     <body>
-      <h2>${title}</h2>
+      <div style="text-align:center">${schoolHdrHtml(true)}</div>
+      <h2 style="text-align:center">${title}</h2>
       ${body}
+      ${schoolFootHtml()}
     </body>
     </html>
   `);
@@ -3620,6 +3647,7 @@ function showView(id,btn){
   if(id==="mp_result"&&!canResult()) return alert("Result is restricted to Staff/Teacher/Admin.");
   if(id==="mp_attsummary"&&!canAttendance()) return alert("Attendance Summary is restricted to authorised accounts.");
   if(id==="mp_tabulation"&&!canResult()) return alert("Tabulation is restricted to Staff/Teacher/Admin.");
+  if(id==="mp_bulk"&&!isAdmin()) return alert("Bulk marksheets are for Admin only.");
   document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
   document.getElementById(id).classList.add("active");
   document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));
@@ -3642,7 +3670,7 @@ populateSubjects();
 function applyMpRoleUI(){
   const show=(id,ok)=>{const el=document.getElementById(id);if(el)el.style.display=ok?"inline-block":"none"};
   show("mp_saveStudentsBtn",isAdmin());show("mp_unlockAttendanceBtn",isAdmin());show("mp_unlockMarksBtn",isAdmin());
-  [["mp_marks",canMarks()],["mp_result",canResult()],["mp_tabulation",canResult()],["mp_programme",isAdmin()]].forEach(([v,ok])=>{
+  [["mp_marks",canMarks()],["mp_result",canResult()],["mp_tabulation",canResult()],["mp_bulk",isAdmin()],["mp_programme",isAdmin()]].forEach(([v,ok])=>{
     const b=document.querySelector('.nav button[data-mpview="'+v+'"]');if(b)b.style.display=ok?"block":"none"});
   renderStudents();
 }
@@ -3862,7 +3890,7 @@ function printMarks(){printTable("mp_marksBody","MP (SE) 2027 — Marks Entry")}
 function printStudents(){printTable("mp_studentBody","MP (SE) 2027 — Student List")}
 function printTable(bodyId,title){
   const _t=document.getElementById(bodyId).closest("table").cloneNode(true);_t.querySelectorAll("select").forEach(x=>x.replaceWith(x.options[x.selectedIndex].text));const html=_t.outerHTML;
-  const w=window.open("","_blank");w.document.write(`<html><head><title>${title}</title><style>body{font-family:Arial;padding:20px}h2{text-align:center}table{width:100%;border-collapse:collapse}th,td{border:1px solid #333;padding:6px;font-size:11px}th{background:#eee}</style></head><body><h2>TALDANGRA FULMATI HIGH SCHOOL [H.S.]</h2><h3 style="text-align:center">${title}</h3>${html}</body></html>`);w.document.close();w.print();
+  const w=window.open("","_blank");w.document.write(`<html><head><title>${title}</title><style>body{font-family:Arial;padding:20px}h2{text-align:center}table{width:100%;border-collapse:collapse}th,td{border:1px solid #333;padding:6px;font-size:11px}th{background:#eee}</style></head><body><h2>${escapeHtml(String(TFHS_SCHOOL.name).toUpperCase())}</h2><p style="text-align:center;font-size:11px;margin:2px 0">${escapeHtml(schoolSubText(false))}</p><h3 style="text-align:center">${title}</h3>${html}<div style="display:flex;justify-content:space-between;margin-top:40px;font-size:11px;font-weight:600"><span>Prepared by</span><span>Checked by</span><span>Head of the Institution</span></div><p style="text-align:center;font-size:9px;color:#555;margin-top:8px">${TFHS_SCHOOL.place?escapeHtml(TFHS_SCHOOL.place)+" • ":""}Printed on ${new Date().toLocaleDateString("en-GB")} • Computer-generated sheet</p></body></html>`);w.document.close();w.print();
 }
 
 async function updateDashboard(){
@@ -3992,7 +4020,7 @@ function printTabulation(){
         med=(document.getElementById("mp_tabMedium")||{}).value||"ALL";
   const note=tabPending.length?`<p style="text-align:center;color:#b91c1c;font-size:11px">PROVISIONAL — pending: ${tabPending.map(c=>escapeHtml(PROGRAMME[c].name)).join(", ")}</p>`:"";
   const w=window.open("","_blank");
-  w.document.write(`<html><head><title>MP (SE) 2027 — Tabulation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;padding:8px}h2,h3{text-align:center;margin:3px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #333;padding:3px 4px;font-size:9px;text-align:center}td:nth-child(6){text-align:left;white-space:nowrap}th{background:#eee}.badge{font-weight:700}</style></head><body><h2>TALDANGRA FULMATI HIGH SCHOOL [H.S.]</h2><h3>MP (SE) 2027 SELECTION TEST — TABULATION SHEET (${so})</h3><p style="text-align:center;font-size:11px">Class X | Medium: ${escapeHtml(med)} | Section: ${escapeHtml(sc)} | Sex: ${escapeHtml(sx)} | Full Marks per subject: 100 | Pass Mark: ${PASS_MARK}</p>${note}${t.outerHTML}</body></html>`);
+  w.document.write(`<html><head><title>MP (SE) 2027 — Tabulation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;padding:8px}h2,h3{text-align:center;margin:3px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #333;padding:3px 4px;font-size:9px;text-align:center}td:nth-child(6){text-align:left;white-space:nowrap}th{background:#eee}.badge{font-weight:700}</style></head><body><h2>${escapeHtml(String(TFHS_SCHOOL.name).toUpperCase())}</h2><p style="text-align:center;font-size:10px;margin:0">${escapeHtml(schoolSubText(false))}</p><h3>MP (SE) 2027 SELECTION TEST — TABULATION SHEET (${so})</h3><p style="text-align:center;font-size:11px">Class X | Medium: ${escapeHtml(med)} | Section: ${escapeHtml(sc)} | Sex: ${escapeHtml(sx)} | Full Marks per subject: 100 | Pass Mark: ${PASS_MARK}</p>${note}${t.outerHTML}</body></html>`);
   w.document.close();w.print();
 }
 function exportTabulation(){
@@ -4032,7 +4060,98 @@ async function loadAttSummary(){
   }catch(e){box.textContent="Could not load: "+e.message}
 }
 
-window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStudents,renderStudents,deleteStudent,setLang,setSex,editProgramme,deleteProgramme,printStudents,loadAttendance,renderAttendance,setAttendance,markAllAttendance,saveAttendance,lockAttendance,unlockAttendance,printAttendance,loadMarks,renderMarks,setMark,saveMarks,lockMarks,unlockMarks,printMarks,generateResult,renderResult,printResult,generateTabulation,renderTabulation,printTabulation,exportTabulation};
+
+/* ---------- BULK MARKSHEETS, SECTION-WISE (Admin): A = Bengali medium, B = Santali medium ---------- */
+const MPB_SEC={A:"Bengali medium",B:"Santali medium"};
+const MPB_ORD=["BNGA","SANT","ENGB","MATH","PHYS","BIOS","HIST","GEGR"];
+let mpbItems=[];
+function mpbSec(s){return String(sec(s)).trim().toUpperCase().charAt(0)||"A"}
+function mpbSecLabel(k){return k+(MPB_SEC[k]?" — "+MPB_SEC[k]:"")}
+function mpbDob(s){
+  let v=val(s,["DOB","Date of Birth","Date Of Birth"]); if(v==="")return"";
+  const p=n=>String(n).padStart(2,"0");
+  if(v instanceof Date&&!isNaN(v))return p(v.getDate())+"-"+p(v.getMonth()+1)+"-"+v.getFullYear();
+  if(typeof v==="number"&&v>20000&&v<80000){const d=new Date(Math.round((v-25569)*86400000));return p(d.getUTCDate())+"-"+p(d.getUTCMonth()+1)+"-"+d.getUTCFullYear()}
+  const t=String(v).trim();let m;
+  if((m=/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/.exec(t)))return p(m[3])+"-"+p(m[2])+"-"+m[1];
+  if((m=/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/.exec(t)))return p(m[1])+"-"+p(m[2])+"-"+m[3];
+  return t;
+}
+function mpbRank(){
+  tabRows.forEach(r=>{r.sRank=0;r.sCount=0});
+  const by={};
+  tabRows.filter(r=>!r.missing&&r.result==="PASS").forEach(r=>{(by[mpbSec(r.student)]=by[mpbSec(r.student)]||[]).push(r)});
+  Object.keys(by).forEach(k=>{
+    const l=by[k].slice().sort((a,b)=>b.total-a.total);
+    l.forEach((r,i)=>{r.sRank=(i>0&&r.total===l[i-1].total)?l[i-1].sRank:i+1;r.sCount=l.length});
+  });
+}
+function mpbSheet(r,showRank){
+  const MS=window.TFHS_MS,S=window.TFHS_SCHOOL,st=r.student,sk=mpbSec(st);
+  const oi=c=>{const i=MPB_ORD.indexOf(c);return i<0?99:i};
+  const rows=tabCols.map((c,i)=>{
+    const x=r.cells[i],code=c.code==="LANG"?firstLang(st):c.code,nm=(PROGRAMME[code]&&PROGRAMME[code].name)||c.name;
+    if(x.state==="P")return{name:nm,code,cells:[MS.cell(undefined),MS.cell(undefined),"&mdash;",100],res:"AWAITED"};
+    if(x.state==="A")return{name:nm,code,cells:[MS.cell("AB"),MS.cell("AB"),"&mdash;",100],res:"ABSENT"};
+    return{name:nm,code,cells:[x.w,x.f,"<b>"+x.t+"</b>",100],res:x.t>=PASS_MARK?"PASS":"FAIL"};
+  }).sort((a,b)=>oi(a.code)-oi(b.code)||a.code.localeCompare(b.code));
+  const pend=r.missing>0,AW='<span class="ms-r-aw">Awaited</span>',summary=[];
+  summary.push(["Grand Total",pend?AW:"<b>"+r.total+"</b> out of <b>"+r.fm+"</b>"]);
+  summary.push(["Percentage",pend?AW:"<b>"+r.pct.toFixed(2)+" %</b>"]);
+  if(showRank&&!pend&&r.sRank>0)summary.push(["Rank in Section "+sk+(MPB_SEC[sk]?" ("+MPB_SEC[sk]+")":""),"<b>"+r.sRank+"</b> out of <b>"+r.sCount+"</b> <span style=\"font-size:11px;color:#555\">(section-wise merit)</span>"]);
+  summary.push(["Result",'<span class="ms-res">'+(pend?AW:r.result==="PASS"?'<span class="ms-r-pass">PASSED</span>':r.result==="ABSENT"?'<span class="ms-r-fail">ABSENT IN '+r.abs+' SUBJECT(S)</span>':'<span class="ms-r-fail">NOT PASSED</span>')+"</span>"]);
+  const father=String(val(st,["Father's Name","Father Name","Father","Guardian","Guardian's Name"])||"").trim();
+  const bsRaw=String(reg(st)||"").replace(/\D/g,"");
+  const bs=bsRaw?bsRaw.padStart(14,"0"):String(reg(st)||"");
+  return MS.build({
+    title:"Class X — MP (SE) 2027 Selection Test",
+    subtitle:S.session?"Session: "+S.session:"",
+    who:[["Name of Candidate",String(nameOf(st)||"")],["B.S. Portal ID",bs],["Class / Section","X-"+sk+(MPB_SEC[sk]?" ("+MPB_SEC[sk]+")":"")],["Roll No.",String(roll(st)||"")],["Sex",String(sex(st)||"")],["Date of Birth",mpbDob(st)],["Father's Name",father],["1st Language",firstLang(st)==="SANT"?"Santali":"Bengali"]],
+    head:["Written (90)","IFE (10)","Total","F.M."],
+    rows,summary,provisional:pend,
+    notes:["Each subject: Written 90 + IFE (Internal Formative Evaluation) 10 = Full Marks 100. Pass mark: "+PASS_MARK+" out of 100 in each subject.","Section A = Bengali-medium, Section B = Santali-medium. Rank is section-wise among PASS candidates; equal marks share the same rank.","AB = Absent. Only finalised (locked) marks are shown. For official results refer to the school."]
+  });
+}
+async function bulkGenerate(){
+  if(!requireAdmin())return;
+  const box=document.getElementById("mp_bBox");
+  if(!students.length)return alert("Load the Class X student database first.");
+  box.className="lockbox";box.textContent="Loading marks…";mpbItems=[];
+  tabRows=[];
+  await generateTabulation();
+  if(!tabRows.length){if(box.textContent==="Loading marks…")box.textContent="Could not prepare marksheets.";return}
+  mpbRank();
+  const g=id=>document.getElementById(id).value,secSel=g("mp_bSec"),from=Number(g("mp_bFrom"))||0,to=Number(g("mp_bTo"))||0,done=document.getElementById("mp_bDone").checked;
+  const inSec=r=>{const k=mpbSec(r.student);return secSel==="ALL"?(k==="A"||k==="B"):secSel==="OTHER"?(k!=="A"&&k!=="B"):k===secSel};
+  const rn=r=>Number(roll(r.student))||0;
+  const pool=tabRows.filter(r=>inSec(r)&&(!from||rn(r)>=from)&&(!to||rn(r)<=to));
+  mpbItems=pool.filter(r=>!(done&&r.missing>0));
+  mpbItems.sort((a,b)=>mpbSec(a.student).localeCompare(mpbSec(b.student))||rn(a)-rn(b)||nameOf(a.student).localeCompare(nameOf(b.student)));
+  const tb=document.getElementById("mp_tabBox");
+  box.className=tb.className;
+  box.textContent=tb.textContent+" "+mpbItems.length+" marksheet(s) ready"+(pool.length-mpbItems.length?" — "+(pool.length-mpbItems.length)+" skipped (marks awaited)":"")+".";
+  const by={};pool.forEach(r=>{const k=mpbSec(r.student);(by[k]=by[k]||[]).push(r)});
+  document.getElementById("mp_bSumBody").innerHTML=Object.keys(by).sort().map(k=>{const l=by[k];
+    return `<tr><td>${escapeHtml(mpbSecLabel(k))}</td><td>${l.length}</td><td>${l.filter(r=>r.result==="PASS").length}</td><td>${l.filter(r=>r.result==="FAIL"||r.result==="ABSENT").length}</td><td>${l.filter(r=>r.missing>0).length}</td><td><b>${mpbItems.filter(r=>mpbSec(r.student)===k).length}</b></td></tr>`}).join("")||'<tr><td colspan="6">No students match.</td></tr>';
+  document.getElementById("mp_bSumPanel").style.display="";
+  document.getElementById("mp_bPrev").innerHTML=mpbItems.map((r,i)=>`<option value="${i}">${escapeHtml(mpbSec(r.student))} • Roll ${escapeHtml(roll(r.student))} • ${escapeHtml(nameOf(r.student))}</option>`).join("");
+  document.getElementById("mp_bPrevPanel").style.display=mpbItems.length?"":"none";
+  bulkPreview();
+}
+function bulkPreview(){
+  const r=mpbItems[Number(document.getElementById("mp_bPrev").value)],b=document.getElementById("mp_bPrevBox");
+  b.innerHTML=r?mpbSheet(r,document.getElementById("mp_bRank").checked):"";
+}
+function bulkPrintAll(){
+  if(!requireAdmin())return;
+  if(!mpbItems.length)return alert("Generate first — no marksheets to print.");
+  if(tabPending.length&&!confirm("Some subject marks are not locked yet ("+tabPending.map(c=>PROGRAMME[c].name).join(", ")+"). These marksheets may be provisional. Print anyway?"))return;
+  const rank=document.getElementById("mp_bRank").checked;
+  const html=mpbItems.map(r=>'<div class="pg">'+mpbSheet(r,rank)+'</div>').join("");
+  window.TFHS_MS.print(html,"Class X Marksheets — "+document.getElementById("mp_bSec").selectedOptions[0].text,{css:"@page{size:A4 portrait;margin:10mm}.pg{page-break-after:always;break-after:page}.pg:last-child{page-break-after:auto;break-after:auto}"});
+}
+
+window.MP={getStudents:()=>students,bulkGenerate,bulkPreview,bulkPrintAll,loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStudents,renderStudents,deleteStudent,setLang,setSex,editProgramme,deleteProgramme,printStudents,loadAttendance,renderAttendance,setAttendance,markAllAttendance,saveAttendance,lockAttendance,unlockAttendance,printAttendance,loadMarks,renderMarks,setMark,saveMarks,lockMarks,unlockMarks,printMarks,generateResult,renderResult,printResult,generateTabulation,renderTabulation,printTabulation,exportTabulation};
 })();
 </script>
 
@@ -5489,7 +5608,7 @@ function parseListPages(pages){
       '.badge{font-weight:700}.badge.fail{color:#b42318}.badge.pass{color:#146c2e}.badge.absent{color:#92400e}'+
       '.sg{display:flex;justify-content:space-between;margin-top:11mm;font-size:9px}.sg div{border-top:1px solid #000;padding-top:2px;min-width:60mm;text-align:center}'+
       '.pf{display:flex;justify-content:space-between;font-size:8px;color:#333;border-top:.6px solid #777;margin-top:3px;padding-top:2px}';
-    const html=pages.map((p,i)=>'<div class="pg"><div class="ph"><div class="sn">'+esc(String(TFHS_SCHOOL.name).toUpperCase())+'</div><div class="ps">'+esc(schoolSubText(true))+'</div><div class="pt">'+esc(cfg.title)+'</div>'+
+    const html=pages.map((p,i)=>'<div class="pg"><div class="ph"><div class="sn">'+esc(String(TFHS_SCHOOL.name).toUpperCase())+'</div><div class="ps">'+esc(schoolSubText(cfg.hs!==false))+'</div><div class="pt">'+esc(cfg.title)+'</div>'+
       (cfg.sub?'<div class="ps">'+esc(cfg.sub)+'</div>':'')+(p.g.heading?'<div class="gh">'+esc(p.g.heading)+(p.first?'':' (contd.)')+'</div>':'')+
       (cfg.provisional?'<div class="prov">'+esc(cfg.provisional)+'</div>':'')+'</div>'+
       '<table class="tb"><thead>'+p.g.thead+'</thead><tbody>'+p.rows.join('')+'</tbody></table>'+
@@ -5521,7 +5640,7 @@ function parseListPages(pages){
     printPro({title:'MP (SE) 2027 SELECTION TEST — TABULATION SHEET ('+so+')',
       sub:'Class X  |  Medium: '+(($('mp_tabMedium')||{}).value||'ALL')+'  |  Section: '+$('mp_tabSec').value+'  |  Sex: '+$('mp_tabSex').value+'  |  Full Marks per subject: 100 (Written 90 + IFE 10)  |  Pass Mark: 25  |  AB = Absent',
       provisional:$('mp_tabBox')&&/PROVISIONAL/.test($('mp_tabBox').textContent)?$('mp_tabBox').textContent.replace(/^⚠\s*/,''):'',
-      groups:[{thead:f.thead,rows:f.rows}],cols:f.cols,leftCols:[6],perPage:perPage('mpRpp',f.hrows)});
+      groups:[{thead:f.thead,rows:f.rows}],hs:false,cols:f.cols,leftCols:[6],perPage:perPage('mpRpp',f.hrows)});
   };
   function tabRowsCount(){ const b=$('mp_tabBody'); return b&&b.rows.length&&b.rows[0].cells.length>3; }
 
