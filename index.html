@@ -286,6 +286,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
     <button onclick="showView('marks',this)">📝 Marks Entry</button>
     <button onclick="showView('combined',this)">🧮 Combined Result (FM-100)</button>
     <button onclick="showView('xitab',this)">📋 Tabulation &amp; Rank (XI)</button>
+    <button onclick="showView('xires',this)">🏅 Result Sheet (XI) — Reg / Sex / Group</button>
     <button onclick="showView('xisupp',this)">📝 Supplementary List (XI)</button>
     <button onclick="showView('analysis',this)">📊 Result Analysis</button>
     <button id="navSubjects" style="display:none" onclick="showView('subjects',this)">⚙️ Subjects (Admin)</button>
@@ -744,6 +745,41 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
     <div id="xtBox" class="lockbox">Click Generate to build the tabulation sheet.</div>
   </div>
   <div class="panel"><div class="tablewrap"><table id="xtTable"><thead id="xtHead"></thead><tbody id="xtBody"><tr><td>Click Generate.</td></tr></tbody></table></div></div>
+</section>
+
+<!-- XI RESULT SHEET (Reg-wise / Sex-wise / Subject-group-wise) -->
+<section id="xires" class="view">
+  <div class="title">Class XI — Result Sheet</div>
+  <div class="subtitle">Registration No. low → high · Sex-wise · Subject-group-wise (same elective combination). Uses locked marks sheets only.</div>
+  <div class="panel">
+    <div class="toolbar">
+      <div class="field"><label>Result of</label>
+        <select id="xrMode">
+          <option value="SEM1">Semester I</option>
+          <option value="SEM1S">Semester I with Supplementary</option>
+          <option value="SEM2">Semester II</option>
+          <option value="COMB">Combined (Sem I + Sem II + Project/Practical)</option>
+        </select></div>
+      <div class="field"><label>Group by</label>
+        <select id="xrBy" onchange="xrRender()"><option value="grp">Subject group (same combination)</option><option value="none">No grouping (all students)</option></select></div>
+      <div class="field"><label>Subject group</label>
+        <select id="xrGroup" onchange="xrRender()"><option value="*">All groups</option></select></div>
+      <div class="field"><label>Sex</label>
+        <select id="xrSex" onchange="xrRender()"><option value="ALL">All</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
+      <div class="field"><label>Sex sections</label>
+        <select id="xrSplit" onchange="xrRender()"><option value="sep">Separate (Boys, then Girls)</option><option value="mix">Together</option></select></div>
+      <div class="field"><label>Medium</label>
+        <select id="xrMedium" onchange="xrRender()"><option value="ALL">All Mediums</option><option value="BENGALI">Bengali</option><option value="SANTALI">Santali</option></select></div>
+      <div class="field"><label>Columns</label>
+        <select id="xrDetail" onchange="xrRender()"><option value="total">Subject Total only</option><option value="full">Component-wise</option></select></div>
+      <div class="field" style="flex:1;min-width:200px"><label>Registration No. / Name</label><input id="xrSearch" placeholder="Registration No. / Name" oninput="xrRender()"></div>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="xrNewPage" checked> Each section on a new page (print)</label>
+      <button class="btn" onclick="xrGenerate()">Generate</button>
+      <button class="btn secondary" onclick="xrPrint()">Print (A4 Landscape)</button>
+    </div>
+    <div id="xrBox" class="lockbox">Click Generate to build the result sheet.</div>
+  </div>
+  <div id="xrOut"><div class="panel"><div class="rv-note">Click Generate.</div></div></div>
 </section>
 
 <!-- ANALYSIS -->
@@ -1306,6 +1342,7 @@ function showView(id,btn){
   if(id==="attsummary" && !canAttendance()){ alert("Attendance Summary is restricted to authorised accounts."); return; }
   if(id==="xisupp" && !canResult()){ alert("Supplementary List is restricted to authorised Staff/Teacher/Admin accounts."); return; }
   if(id==="xitab" && !canResult()){ alert("Tabulation is restricted to authorised Staff/Teacher/Admin accounts."); return; }
+  if(id==="xires" && !canResult()){ alert("Result Sheet is restricted to authorised Staff/Teacher/Admin accounts."); return; }
   document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
   document.getElementById(id).classList.add("active");
 
@@ -2833,6 +2870,123 @@ function exportXiTab(){
   const ws=XLSX.utils.aoa_to_sheet(aoa), wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,"Tabulation");
   XLSX.writeFile(wb,"XI_"+xtModeUsed+"_Tabulation_Rank.xlsx");
+}
+
+/* ===== CLASS XI RESULT SHEET: Registration-wise / Sex-wise / Subject-group-wise ===== */
+const XR_LANGS=["BNGA","SANT","ENGB"];
+const XR_LABEL={SEM1:"SEMESTER I",SEM1S:"SEMESTER I (WITH SUPPLEMENTARY)",SEM2:"SEMESTER II",COMB:"COMBINED (SEM I + SEM II + PROJECT/PRACTICAL)"};
+let xrModeSel="SEM1";
+function xrCmp(a,b){return String(a||"").localeCompare(String(b||""),undefined,{numeric:true,sensitivity:"base"})}
+function xrSexOf(st){const x=getStudentSex(st);return x==="Male"||x==="Female"?x:"Other"}
+function xrGKey(st){return xtCols.filter(c=>!XR_LANGS.includes(c)&&studentTakesSubject(st,c)).join("+")}
+function xrGName(k){return k==="__ALL__"?"ALL STUDENTS":(k?k.split("+").join(" + "):"NO ELECTIVE RECORDED")}
+function xrSexTitle(x){return x==="Male"?"BOYS":x==="Female"?"GIRLS":x==="Other"?"OTHER / NOT RECORDED":""}
+async function xrGenerate(){
+  const box=document.getElementById("xrBox");
+  xrModeSel=document.getElementById("xrMode").value;
+  document.getElementById("xtMode").value=xrModeSel;
+  box.className="lockbox"; box.textContent="Loading marks…";
+  xtRows=[];
+  await generateXiTab();
+  if(!xtRows.length){ if(box.textContent==="Loading marks…") box.textContent="Could not build the result sheet."; return; }
+  const tb=document.getElementById("xtBox"); box.className=tb.className; box.textContent=tb.textContent;
+  xrFillGroups(); xrRender();
+}
+function xrFillGroups(){
+  const sel=document.getElementById("xrGroup"), cur=sel.value, cnt=new Map();
+  xtRows.forEach(r=>{const k=xrGKey(r.student);cnt.set(k,(cnt.get(k)||0)+1)});
+  const keys=[...cnt.keys()].sort((a,b)=>xrGName(a).localeCompare(xrGName(b)));
+  sel.innerHTML='<option value="*">All groups</option>'+keys.map(k=>`<option value="${escapeHtml(k)}">${escapeHtml(xrGName(k))} (${cnt.get(k)})</option>`).join("");
+  if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
+}
+function xrSections(){
+  const g=id=>document.getElementById(id).value;
+  const q=(g("xrSearch")||"").toLowerCase().trim(), sx=g("xrSex"), med=g("xrMedium"), grp=g("xrGroup"), by=g("xrBy"), split=g("xrSplit");
+  const rows=xtRows.filter(r=>{const s=r.student;
+    return (med==="ALL"||(studentTakesSubject(s,"SANT")?"SANTALI":"BENGALI")===med)&&(sx==="ALL"||xrSexOf(s)===sx)&&(grp==="*"||xrGKey(s)===grp)&&
+      (!q||String(getStudentReg(s)||"").toLowerCase().includes(q)||String(getStudentName(s)||"").toLowerCase().includes(q));});
+  const gm=new Map();
+  rows.forEach(r=>{const k=by==="grp"?xrGKey(r.student):"__ALL__"; if(!gm.has(k))gm.set(k,[]); gm.get(k).push(r)});
+  const keys=[...gm.keys()].sort((a,b)=>xrGName(a).localeCompare(xrGName(b)));
+  const byReg=(a,b)=>xrCmp(getStudentReg(a.student),getStudentReg(b.student))||xrCmp(getStudentRoll(a.student),getStudentRoll(b.student));
+  const secs=[];
+  keys.forEach(k=>{
+    const list=gm.get(k);
+    const parts=split==="sep"?["Male","Female","Other"].map(x=>[x,list.filter(r=>xrSexOf(r.student)===x)]).filter(p=>p[1].length):[["ALL",list]];
+    parts.forEach(([x,l])=>secs.push({gtitle:xrGName(k),sex:x,rows:l.slice().sort(byReg)}));
+  });
+  return secs;
+}
+function xrSummary(sec){
+  const c={PASS:0,FAIL:0,ABSENT:0,INCOMPLETE:0}; sec.rows.forEach(r=>{c[r.result]=(c[r.result]||0)+1});
+  return `Total: <b>${sec.rows.length}</b> | Pass: <b>${c.PASS}</b> | Fail: <b>${c.FAIL}</b>`+(c.ABSENT?` | Absent: <b>${c.ABSENT}</b>`:"")+(c.INCOMPLETE?` | Incomplete: <b>${c.INCOMPLETE}</b>`:"");
+}
+function xrTable(sec,detail){
+  const labels=xtSubLabels(), full=detail&&xtModeUsed!=="SEM1";
+  const idx=xtCols.map((c,i)=>i).filter(i=>sec.rows.some(r=>r.cells[i].state!=="N"));
+  const hasRoll=students.some(s=>String(getStudentRoll(s))!==String(getStudentReg(s)));
+  const base=["SL","Registration No."].concat(hasRoll?["Roll"]:[],["Name","Sex"]);
+  const tail=[xtModeUsed==="COMB"?"Grand Total (Best 5)":"Grand Total","Full Marks","%","Result","Rank"];
+  let head;
+  if(full){
+    head="<tr>"+base.map(h=>`<th rowspan="2">${h}</th>`).join("")+idx.map(i=>`<th colspan="${labels[i].length}">${escapeHtml(xtCols[i])}</th>`).join("")+tail.map(h=>`<th rowspan="2">${h}</th>`).join("")+"</tr><tr>"+idx.map(i=>labels[i].map(x=>`<th>${x}</th>`).join("")).join("")+"</tr>";
+  }else{
+    head="<tr>"+base.concat(idx.map(i=>escapeHtml(xtCols[i])),tail).map(h=>`<th>${h}</th>`).join("")+"</tr>";
+  }
+  const ncols=base.length+tail.length+idx.reduce((a,i)=>a+(full?labels[i].length:1),0);
+  const body=sec.rows.map((r,n)=>{
+    const s=r.student;
+    const cells=idx.map(i=>{
+      const c=r.cells[i], w=full?labels[i].length:1;
+      if(c.state==="N") return `<td colspan="${w}" style="color:#94a3b8">·</td>`;
+      if(c.state==="P") return `<td colspan="${w}">—</td>`;
+      if(c.state==="A") return `<td colspan="${w}" style="color:#b91c1c"><b>AB</b></td>`;
+      const dropped=(xtModeUsed==="COMB"&&c.counted===false);
+      const bad=dropped?' style="color:#94a3b8;font-style:italic"':(c.t<xtPassMin(c.fm)?' style="color:#b91c1c;font-weight:700"':"");
+      if(!full) return `<td${bad}>${c.t}</td>`;
+      const parts=xtModeUsed==="SEM1"?[c.t]:[...c.parts,c.t];
+      return parts.map((v,k)=>`<td${k===parts.length-1?bad:""}>${v}</td>`).join("");
+    }).join("");
+    const cls=r.result==="PASS"?"pass":(r.result==="INCOMPLETE"?"absent":"fail");
+    return `<tr><td>${n+1}</td><td>${escapeHtml(getStudentReg(s))}</td>${hasRoll?`<td>${escapeHtml(getStudentRoll(s))}</td>`:""}<td style="text-align:left;white-space:nowrap">${escapeHtml(getStudentName(s))}</td><td>${escapeHtml(getStudentSex(s))}</td>${cells}<td><b>${r.total}</b></td><td>${r.fm}</td><td>${r.pct.toFixed(2)}</td><td><span class="badge ${cls}">${r.result}</span></td><td>${r.rank}</td></tr>`;
+  }).join("");
+  return {head,body,ncols};
+}
+function xrRender(){
+  const out=document.getElementById("xrOut");
+  if(!xtRows.length||xtModeUsed!==(xrModeSel==="SEM1S"?"SEM1":xrModeSel)){ out.innerHTML='<div class="panel"><div class="rv-note">Click Generate.</div></div>'; return; }
+  const secs=xrSections(), det=document.getElementById("xrDetail").value==="full";
+  out.innerHTML=secs.length?secs.map(sec=>{const t=xrTable(sec,det);
+    return `<div class="panel"><h3 style="margin:0 0 4px">${escapeHtml(sec.gtitle)}${sec.sex!=="ALL"?" — "+xrSexTitle(sec.sex):""}</h3><div class="rv-note">${xrSummary(sec)}</div><div class="tablewrap"><table><thead>${t.head}</thead><tbody>${t.body}</tbody></table></div></div>`;
+  }).join(""):'<div class="panel"><div class="rv-note">No students match the filter.</div></div>';
+}
+function xrPrint(){
+  if(!xtRows.length){ alert("Generate the result sheet first."); return; }
+  const secs=xrSections(); if(!secs.length){ alert("No students match the filter."); return; }
+  const det=document.getElementById("xrDetail").value==="full", newPage=document.getElementById("xrNewPage").checked;
+  const med=document.getElementById("xrMedium").value, order="Registration No. (low to high)";
+  const note=xtPending.length?`<div style="color:#b91c1c;font-size:10px;margin-top:3px">PROVISIONAL — marks not locked for: ${[...new Set(xtPending)].map(escapeHtml).join(", ")}</div>`:"";
+  const tables=secs.map((sec,i)=>{
+    const t=xrTable(sec,det);
+    const hdr=`<div class="school">TALDANGRA FULMATI HIGH SCHOOL [H.S.]</div><div class="exam">CLASS XI — ${XR_LABEL[xrModeSel]} — RESULT SHEET</div>`+
+      `<div class="grp">SUBJECT GROUP: ${escapeHtml(sec.gtitle)}${sec.sex!=="ALL"?" &nbsp;|&nbsp; "+xrSexTitle(sec.sex):""}</div>`+
+      `<div class="meta">Order: ${order}${med!=="ALL"?" | Medium: "+escapeHtml(med):""} | ${xrSummary(sec).replace(/<\/?b>/g,"")}</div>`+
+      `<div class="meta">AB = Absent, — = marks not available, · = subject not taken${xtModeUsed==="COMB"?", grey italic = 6th subject (not counted)":""}</div>`+note;
+    return `<table class="${newPage&&i?"pb":(i?"gap":"")}"><thead><tr><td class="dh" colspan="${t.ncols}">${hdr}</td></tr>${t.head}</thead><tbody>${t.body}</tbody><tfoot><tr><td class="df" colspan="${t.ncols}"><div class="sig"><span>Prepared by</span><span>Checked by</span><span>Headmaster</span></div></td></tr></tfoot></table>`;
+  }).join("");
+  const w=window.open("","_blank");
+  if(!w){ alert("Please allow pop-ups to print this sheet."); return; }
+  w.document.write(`<html><head><title>Class XI Result Sheet</title><style>
+@page{size:A4 landscape;margin:8mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0}
+table{width:100%;border-collapse:collapse}table.pb{page-break-before:always}table.gap{margin-top:18px}
+thead{display:table-header-group}tfoot{display:table-footer-group}tr{page-break-inside:avoid}
+th,td{border:1px solid #333;padding:3px 4px;font-size:9.5px;text-align:center;vertical-align:middle}th{background:#eee}
+td.dh,td.df{border:0;padding:2px 0}.dh{text-align:center}.school{font-size:15px;font-weight:800}.exam{font-size:11.5px;font-weight:700;margin-top:2px}
+.grp{font-size:11px;font-weight:800;margin-top:4px}.meta{font-size:9.5px;margin-top:2px}
+.sig{display:flex;justify-content:space-between;padding-top:26px;font-size:10px;font-weight:600}
+.badge{font-weight:700}.badge.fail{color:#b42318}.badge.pass{color:#146c2e}.badge.absent{color:#92400e}
+</style></head><body>${tables}</body></html>`);
+  w.document.close(); w.focus(); w.print();
 }
 
 /* ===== ATTENDANCE SUMMARY (shared by Class XI and Class X) ===== */
