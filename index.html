@@ -287,6 +287,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
     <button onclick="showView('combined',this)">🧮 Combined Result (FM-100)</button>
     <button onclick="showView('xitab',this)">📋 Tabulation &amp; Rank (XI)</button>
     <button onclick="showView('xires',this)">🏅 Result Sheet (XI) — Reg / Sex / Group</button>
+    <button onclick="showView('xirank',this)">🏆 Merit List &amp; Rank (XI) — Sec-wise</button>
     <button onclick="showView('xisupp',this)">📝 Supplementary List (XI)</button>
     <button onclick="showView('analysis',this)">📊 Result Analysis</button>
     <button id="navSubjects" style="display:none" onclick="showView('subjects',this)">⚙️ Subjects (Admin)</button>
@@ -780,6 +781,41 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
     <div id="xrBox" class="lockbox">Click Generate to build the result sheet.</div>
   </div>
   <div id="xrOut"><div class="panel"><div class="rv-note">Click Generate.</div></div></div>
+</section>
+
+<!-- XI MERIT LIST & RANK (Science B / Arts A / Santal C / Overall) -->
+<section id="xirank" class="view">
+  <div class="title">Class XI — Merit List &amp; Rank Calculator</div>
+  <div class="subtitle">Section-wise merit: SCIENCE (B Sec) · ARTS (A Sec) · SANTAL (C Sec) — plus Overall rank of all three combined. Uses locked marks sheets only.</div>
+  <div class="panel">
+    <div class="toolbar">
+      <div class="field"><label>Result of</label>
+        <select id="xmMode">
+          <option value="COMB">Combined (Sem I + Sem II + Project/Practical)</option>
+          <option value="SEM1">Semester I</option>
+          <option value="SEM1S">Semester I with Supplementary</option>
+          <option value="SEM2">Semester II</option>
+        </select></div>
+      <div class="field"><label>Show</label>
+        <select id="xmShow" onchange="xmRender()">
+          <option value="ALL">All four lists</option>
+          <option value="B">Science (B Sec)</option>
+          <option value="A">Arts (A Sec)</option>
+          <option value="C">Santal (C Sec)</option>
+          <option value="OVERALL">Overall (A + B + C combined)</option>
+        </select></div>
+      <div class="field"><label>Top (blank = all)</label><input id="xmTop" type="number" min="1" style="width:90px" oninput="xmRender()"></div>
+      <div class="field"><label>Columns</label>
+        <select id="xmDetail" onchange="xmRender()"><option value="sum">Grand Total only</option><option value="sub">With subject totals</option></select></div>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="xmPass" checked onchange="xmRecompute()"> Rank PASS candidates only</label>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="xmNewPage" checked> Each list on a new page (print)</label>
+      <button class="btn" onclick="xmGenerate()">Generate</button>
+      <button class="btn secondary" onclick="xmPrint()">Print (A4 Landscape)</button>
+      <button class="btn success" onclick="xmSave()">Save Section Ranks to Marksheets (Admin)</button>
+    </div>
+    <div id="xmBox" class="lockbox">Click Generate to calculate ranks.</div>
+  </div>
+  <div id="xmOut"><div class="panel"><div class="rv-note">Click Generate.</div></div></div>
 </section>
 
 <!-- ANALYSIS -->
@@ -1343,6 +1379,7 @@ function showView(id,btn){
   if(id==="xisupp" && !canResult()){ alert("Supplementary List is restricted to authorised Staff/Teacher/Admin accounts."); return; }
   if(id==="xitab" && !canResult()){ alert("Tabulation is restricted to authorised Staff/Teacher/Admin accounts."); return; }
   if(id==="xires" && !canResult()){ alert("Result Sheet is restricted to authorised Staff/Teacher/Admin accounts."); return; }
+  if(id==="xirank" && !canResult()){ alert("Merit List is restricted to authorised Staff/Teacher/Admin accounts."); return; }
   document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
   document.getElementById(id).classList.add("active");
 
@@ -2989,6 +3026,108 @@ td.dh,td.df{border:0;padding:2px 0}.dh{text-align:center}.school{font-size:15px;
   w.document.close(); w.focus(); w.print();
 }
 
+/* ===== CLASS XI MERIT LIST & RANK: Science (B) / Arts (A) / Santal (C) / Overall ===== */
+const XM_NAME={A:"ARTS",B:"SCIENCE",C:"SANTAL"};
+let xmModeSel="COMB";
+function xmSec(st){
+  let v=String(findStudentValue(st,["section","Section","SECTION","sec","Sec"])||"").trim().toUpperCase().replace(/^XI[\s\-]*/,"");
+  if(!v){ const m=String(getStudentRoll(st)||"").trim().toUpperCase().match(/^(?:XI)?([A-Z])/); v=m?m[1]:""; }
+  v=v.charAt(0); return /[A-Z]/.test(v)?v:"";
+}
+function xmSecLabel(st){ const k=xmSec(st); return k?(k+(XM_NAME[k]?" — "+XM_NAME[k].charAt(0)+XM_NAME[k].slice(1).toLowerCase():"")):""; }
+function xmCompute(){
+  const passOnly=document.getElementById("xmPass").checked;
+  const key=r=>Math.round(r.pct*10000);
+  const ok=r=>r.result!=="INCOMPLETE"&&(!passOnly||r.result==="PASS");
+  const assign=(list,prop)=>{ const s=list.slice().sort((a,b)=>key(b)-key(a)); s.forEach((r,i)=>{ r[prop]=(i>0&&key(r)===key(s[i-1]))?s[i-1][prop]:i+1; }); };
+  xtRows.forEach(r=>{ r.mSec=xmSec(r.student); r.mOverall=0; r.mSecRank=0; r.mSecCount=0; });
+  const elig=xtRows.filter(ok); assign(elig,"mOverall");
+  const by={}; elig.forEach(r=>{ (by[r.mSec]=by[r.mSec]||[]).push(r); });
+  Object.keys(by).forEach(k=>{ if(!k) return; const l=by[k]; assign(l,"mSecRank"); l.forEach(r=>r.mSecCount=l.length); });
+}
+async function xmGenerate(){
+  const box=document.getElementById("xmBox");
+  xmModeSel=document.getElementById("xmMode").value;
+  document.getElementById("xtMode").value=xmModeSel;
+  box.className="lockbox"; box.textContent="Loading marks…"; xtRows=[];
+  await generateXiTab();
+  if(!xtRows.length){ if(box.textContent==="Loading marks…") box.textContent="Could not calculate ranks."; return; }
+  xmRecompute();
+}
+function xmRecompute(){
+  if(!xtRows.length||xtModeUsed!==(xmModeSel==="SEM1S"?"SEM1":xmModeSel)){ xmRender(); return; }
+  xmCompute();
+  const box=document.getElementById("xmBox"), tb=document.getElementById("xtBox");
+  const ranked=xtRows.filter(r=>r.mOverall>0).length, noSec=xtRows.filter(r=>!"ABC".includes(r.mSec||"-")).length;
+  box.className=tb.className;
+  box.textContent=tb.textContent+" Ranked "+ranked+" of "+xtRows.length+" students (ties share the same rank; rank is on percentage of the Grand Total)."+(noSec?" ⚠ "+noSec+" student(s) have no A/B/C section in their record — they get an Overall rank only.":"");
+  xmRender();
+}
+function xmLists(){
+  const show=document.getElementById("xmShow").value, top=Number(document.getElementById("xmTop").value)||0;
+  const byReg=(a,b)=>xrCmp(getStudentReg(a.student),getStudentReg(b.student));
+  const mk=k=>({kind:"sec",k,title:XM_NAME[k]+" — "+k+" SECTION MERIT LIST",rows:xtRows.filter(r=>r.mSec===k&&r.mSecRank>0&&(!top||r.mSecRank<=top)).sort((a,b)=>a.mSecRank-b.mSecRank||byReg(a,b))});
+  const ov=()=>({kind:"all",title:"OVERALL MERIT LIST — SCIENCE (B) + ARTS (A) + SANTAL (C) COMBINED",rows:xtRows.filter(r=>r.mOverall>0&&(!top||r.mOverall<=top)).sort((a,b)=>a.mOverall-b.mOverall||byReg(a,b))});
+  const keys=show==="ALL"?["B","A","C","OVERALL"]:[show];
+  return keys.map(k=>k==="OVERALL"?ov():mk(k));
+}
+function xmTable(L,detail){
+  const idx=detail?xtCols.map((c,i)=>i).filter(i=>L.rows.some(r=>r.cells[i].state!=="N")):[];
+  const head0=(L.kind==="all"?["Overall Rank","Sec","Sec Rank"]:["Sec Rank","Overall Rank"]).concat(["Registration No.","Name","Sex"],idx.map(i=>xtCols[i]),[xtModeUsed==="COMB"?"Grand Total (Best 5)":"Grand Total","Full Marks","%","Result"]);
+  const head="<tr>"+head0.map(h=>`<th>${escapeHtml(h)}</th>`).join("")+"</tr>";
+  const body=L.rows.map(r=>{
+    const s=r.student, cls=r.result==="PASS"?"pass":"fail";
+    const rk=L.kind==="all"?`<td><b>${r.mOverall}</b></td><td>${escapeHtml(r.mSec||"—")}</td><td>${r.mSecRank||"—"}</td>`:`<td><b>${r.mSecRank}</b></td><td>${r.mOverall}</td>`;
+    const cells=idx.map(i=>{ const c=r.cells[i];
+      if(c.state==="N") return '<td style="color:#94a3b8">·</td>'; if(c.state==="P") return "<td>—</td>"; if(c.state==="A") return '<td style="color:#b91c1c"><b>AB</b></td>';
+      const dropped=(xtModeUsed==="COMB"&&c.counted===false);
+      return `<td${dropped?' style="color:#94a3b8;font-style:italic"':(c.t<xtPassMin(c.fm)?' style="color:#b91c1c;font-weight:700"':"")}>${c.t}</td>`; }).join("");
+    return `<tr>${rk}<td>${escapeHtml(getStudentReg(s))}</td><td style="text-align:left;white-space:nowrap">${escapeHtml(getStudentName(s))}</td><td>${escapeHtml(getStudentSex(s))}</td>${cells}<td><b>${r.total}</b></td><td>${r.fm}</td><td>${r.pct.toFixed(2)}</td><td><span class="badge ${cls}">${r.result}</span></td></tr>`;
+  }).join("");
+  return {head,body,ncols:head0.length};
+}
+function xmRender(){
+  const out=document.getElementById("xmOut");
+  if(!xtRows.length||xtModeUsed!==(xmModeSel==="SEM1S"?"SEM1":xmModeSel)||xtRows[0].mOverall===undefined){ out.innerHTML='<div class="panel"><div class="rv-note">Click Generate.</div></div>'; return; }
+  const det=document.getElementById("xmDetail").value==="sub";
+  out.innerHTML=xmLists().map(L=>{ const t=xmTable(L,det);
+    return `<div class="panel"><h3 style="margin:0 0 4px">${escapeHtml(L.title)}</h3><div class="rv-note">Candidates ranked: <b>${L.rows.length}</b></div><div class="tablewrap"><table><thead>${t.head}</thead><tbody>${t.body||'<tr><td colspan="'+t.ncols+'">No ranked candidates.</td></tr>'}</tbody></table></div></div>`; }).join("");
+}
+function xmPrint(){
+  if(!xtRows.length||xtRows[0].mOverall===undefined){ alert("Generate the merit list first."); return; }
+  const det=document.getElementById("xmDetail").value==="sub", newPage=document.getElementById("xmNewPage").checked, pass=document.getElementById("xmPass").checked;
+  const note=xtPending.length?`<div style="color:#b91c1c;font-size:10px;margin-top:3px">PROVISIONAL — marks not locked for: ${[...new Set(xtPending)].map(escapeHtml).join(", ")}</div>`:"";
+  const tables=xmLists().map((L,i)=>{ const t=xmTable(L,det);
+    const hdr=`<div class="school">TALDANGRA FULMATI HIGH SCHOOL [H.S.]</div><div class="exam">CLASS XI — ${XR_LABEL[xmModeSel]}</div><div class="grp">${escapeHtml(L.title)}</div>`+
+      `<div class="meta">Candidates ranked: ${L.rows.length} | ${pass?"Rank given to PASS candidates only":"Rank given to all candidates with complete marks"} | Equal marks share the same rank</div>`+note;
+    return `<table class="${newPage&&i?"pb":(i?"gap":"")}"><thead><tr><td class="dh" colspan="${t.ncols}">${hdr}</td></tr>${t.head}</thead><tbody>${t.body}</tbody><tfoot><tr><td class="df" colspan="${t.ncols}"><div class="sig"><span>Prepared by</span><span>Checked by</span><span>Headmaster</span></div></td></tr></tfoot></table>`; }).join("");
+  const w=window.open("","_blank"); if(!w){ alert("Please allow pop-ups to print."); return; }
+  w.document.write(`<html><head><title>Class XI Merit List</title><style>
+@page{size:A4 landscape;margin:8mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0}
+table{width:100%;border-collapse:collapse}table.pb{page-break-before:always}table.gap{margin-top:18px}
+thead{display:table-header-group}tfoot{display:table-footer-group}tr{page-break-inside:avoid}
+th,td{border:1px solid #333;padding:3px 4px;font-size:10px;text-align:center;vertical-align:middle}th{background:#eee}
+td.dh,td.df{border:0;padding:2px 0}.school{font-size:15px;font-weight:800}.exam{font-size:11.5px;font-weight:700;margin-top:2px}
+.grp{font-size:12px;font-weight:800;margin-top:4px}.meta{font-size:9.5px;margin-top:2px}
+.sig{display:flex;justify-content:space-between;padding-top:26px;font-size:10px;font-weight:600}
+.badge{font-weight:700}.badge.fail{color:#b42318}.badge.pass{color:#146c2e}.badge.absent{color:#92400e}
+</style></head><body>${tables}</body></html>`);
+  w.document.close(); w.focus(); w.print();
+}
+async function xmSave(){
+  if(!isAdmin()){ alert("Only Admin can save section ranks to the marksheets."); return; }
+  if(!xtRows.length||xtRows[0].mOverall===undefined){ alert("Generate the merit list first."); return; }
+  if(xmModeSel==="SEM2"){ alert("The student marksheet shows Semester I, Semester I + Supplementary and Combined results only. Choose one of those to save."); return; }
+  if(xtPending.length&&!confirm("Some marks sheets are not locked yet, so these ranks are PROVISIONAL. Save to marksheets anyway?")) return;
+  const map={}; xtRows.forEach(r=>{ const k=studentKey(r.student); if(k&&r.mSecRank>0) map[k]=[r.mSec,r.mSecRank,r.mSecCount,r.mOverall]; });
+  const data={at:Date.now(),passOnly:document.getElementById("xmPass").checked,map};
+  try{
+    const ref=db.collection("students").doc("xiConfig");
+    try{ await ref.update({["ranks."+xmModeSel]:data}); }catch(e){ await ref.set({ranks:{[xmModeSel]:data}},{merge:true}); }
+    alert("Saved. The individual marksheet now shows the Rank in Section for "+Object.keys(map).length+" students ("+XR_LABEL[xmModeSel]+").");
+  }catch(e){ alert("Could not save ranks: "+e.message); }
+}
+
 /* ===== ATTENDANCE SUMMARY (shared by Class XI and Class X) ===== */
 const AttSum={
   data:{},
@@ -4367,7 +4506,7 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
       const fullReady=s1&&s2;
 
       /* ---- which stage to show ---- */
-      let pub={}; try{ const pc=await db.collection('students').doc('xiConfig').get(); pub=(pc.exists&&pc.data().publish)||{}; }catch(e){ pub={}; }
+      let pub={}, ranksAll={}; try{ const pc=await db.collection('students').doc('xiConfig').get(); pub=(pc.exists&&pc.data().publish)||{}; ranksAll=(pc.exists&&pc.data().ranks)||{}; }catch(e){ pub={}; ranksAll={}; }
       const okSem1=!!pub.sem1, okSupp=!!pub.supp&&sp, okFull=!!pub.full&&fullReady;
       if(!okSem1&&!okSupp&&!okFull){ msg(pub.note||'Result is not published yet. Please wait for the school\'s announcement.'); return; }
       let want=$('rvExam').value; if(!['SEM1','SEM1S','COMB'].includes(want)) want='AUTO';
@@ -4435,6 +4574,7 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
       if(wantOverall){
         summary.push(['Grand Total (Best of Five)',anyP?'<span class="ms-r-aw">Awaited</span>':'<b>'+t5+'</b> out of <b>'+fm5+'</b>']);
         summary.push(['Percentage',anyP?'<span class="ms-r-aw">Awaited</span>':'<b>'+(fm5?(t5/fm5*100).toFixed(2):'0.00')+' %</b>']);
+        if(!anyP){ const rkm=(ranksAll[mode]||{}).map, e=rkm&&rkm[k]; if(e){ const SN={A:'Arts',B:'Science',C:'Santal'}; summary.push(['Rank in Section '+e[0]+(SN[e[0]]?' ('+SN[e[0]]+')':''),'<b>'+e[1]+'</b> out of <b>'+e[2]+'</b> <span style="font-size:11px;color:#555">(section-wise merit)</span>']); } }
         summary.push(['Result','<span class="ms-res">'+(overall==='AWAITED'?'<span class="ms-r-aw">Awaited</span>':overall==='PASS'?'<span class="ms-r-pass">PASSED</span>':overall==='ABSENT'?'<span class="ms-r-fail">ABSENT</span>':'<span class="ms-r-fail">NOT PASSED</span>')+'</span>']);
       }
       const names=l=>l.map(c=>XI_NAMES[c]||c).join(', ');
@@ -4448,7 +4588,7 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
       notes.push('AB = Absent. Only finalised (locked) marks are shown. For official results refer to the school.');
       const html=MS.build({
         title:'Class XI — '+label,
-        who:[['Name of Candidate',String(getStudentName(st)||'')],['Registration No.',String(getStudentReg(st)||'')],['Roll No.',String(getStudentRoll(st)||'')],['Banglar Siksha ID',getBs(st)],['Sex',String(getStudentSex(st)||'')],['Date of Birth',getDob(st)],["Father's Name",father],['Medium',medium]],
+        who:[['Name of Candidate',String(getStudentName(st)||'')],['Registration No.',String(getStudentReg(st)||'')],['Roll No.',String(getStudentRoll(st)||'')],['Section',(typeof xmSecLabel==='function'?xmSecLabel(st):'')],['Banglar Siksha ID',getBs(st)],['Sex',String(getStudentSex(st)||'')],['Date of Birth',getDob(st)],["Father's Name",father],['Medium',medium]],
         head:mode==='COMB'?['Sem I Th.','Sem II Th.','Pr. / Pj.','Total','F.M.']:['Full Marks','Pass Marks','Marks Obtained'],
         rows,summary,notes,provisional:anyP
       });
