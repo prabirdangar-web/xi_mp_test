@@ -286,6 +286,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
     <button onclick="showView('marks',this)">📝 Marks Entry</button>
     <button onclick="showView('combined',this)">🧮 Combined Result (FM-100)</button>
     <button onclick="showView('xitab',this)">📋 Tabulation &amp; Rank (XI)</button>
+    <button onclick="showView('xisupp',this)">📝 Supplementary List (XI)</button>
     <button onclick="showView('analysis',this)">📊 Result Analysis</button>
     <button id="navSubjects" style="display:none" onclick="showView('subjects',this)">⚙️ Subjects (Admin)</button>
     <button id="navStaff" style="display:none" onclick="showView('staffappr',this)">👥 Staff Approvals (Admin)</button>
@@ -697,6 +698,24 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
 </section>
 
 <!-- XI TABULATION & RANK -->
+<section id="xisupp" class="view">
+  <div class="title">Class XI — Semester I Supplementary List</div>
+  <div class="subtitle">Candidates who have not cleared Semester I (below 30% of theory marks, or absent) in a counted subject. Uses locked Semester I marks only.</div>
+  <div class="panel">
+    <div class="toolbar">
+      <div class="field"><label>List</label><select id="spMode"><option value="sub">Subject-wise</option><option value="full">Full list (student-wise)</option></select></div>
+      <div class="field"><label>Subject</label><select id="spSub"><option value="*">All subjects</option></select></div>
+      <div class="field"><label>Rows / page</label><select id="spRpp"><option value="0">Auto</option><option>16</option><option>20</option><option>24</option><option>28</option><option>32</option><option>36</option></select></div>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="spAll"> Include additional (6th) subject failures</label>
+      <button class="btn" id="spGen">Generate</button>
+      <button class="btn secondary" id="spPrint">Print (A4 Landscape)</button>
+      <button class="btn success" id="spXls">Excel</button>
+    </div>
+    <div id="spBox" class="lockbox">Click Generate to build the supplementary list.</div>
+  </div>
+  <div class="panel" id="spOut"><div class="rv-note">Click Generate.</div></div>
+</section>
+
 <section id="xitab" class="view">
   <div class="title">Class XI — Tabulation Sheet &amp; Rank-wise Report</div>
   <div class="subtitle">All subjects, Semester I / Semester II / Combined. Uses locked marks sheets only.</div>
@@ -705,6 +724,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
       <div class="field"><label>Report</label>
         <select id="xtMode" onchange="generateXiTab()">
           <option value="SEM1">Semester I</option>
+          <option value="SEM1S">Semester I with Supplementary</option>
           <option value="SEM2">Semester II</option>
           <option value="COMB">Combined (Sem I + Sem II + Project/Practical)</option>
         </select></div>
@@ -1284,6 +1304,7 @@ function showView(id,btn){
   if(id==="marks" && !canMarks()){ alert("Marks Entry is restricted to authorised Staff/Teacher/Admin accounts."); return; }
   if(id==="combined" && !canResult()){ alert("Combined Result is restricted to authorised Staff/Teacher/Admin accounts."); return; }
   if(id==="attsummary" && !canAttendance()){ alert("Attendance Summary is restricted to authorised accounts."); return; }
+  if(id==="xisupp" && !canResult()){ alert("Supplementary List is restricted to authorised Staff/Teacher/Admin accounts."); return; }
   if(id==="xitab" && !canResult()){ alert("Tabulation is restricted to authorised Staff/Teacher/Admin accounts."); return; }
   document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
   document.getElementById(id).classList.add("active");
@@ -1678,7 +1699,7 @@ async function loadSubjectConfig(){
   renderSubjects();
 }
 async function persistSubjects(){
-  await db.collection("students").doc("xiConfig").set({schemes:SCHEMES,schedule:EXAM_SCHEDULE,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+  await db.collection("students").doc("xiConfig").set({schemes:SCHEMES,schedule:EXAM_SCHEDULE,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
   refreshSubjectLists(); populateSubjects(); renderSubjects(); updateDashboard();
 }
 function renderSubjects(){
@@ -2623,13 +2644,13 @@ function printCombined(){
 }
 
 /* ===== CLASS XI TABULATION + RANK (Sem I / Sem II / Combined) ===== */
-let xtRows=[],xtCols=[],xtPending=[],xtModeUsed="SEM1";
+let xtRows=[],xtCols=[],xtPending=[],xtModeUsed="SEM1",xtSuppMode=false;
 const XT_LABEL={SEM1:"SEMESTER I",SEM2:"SEMESTER II",COMB:"COMBINED (SEM I + SEM II + PROJECT/PRACTICAL)"};
 function xtPassMin(max){return Math.ceil(max*0.30)}
 async function generateXiTab(){
   if(!requireResult()) return;
   if(!students.length){ alert("Please import/load XI-REG students first."); return; }
-  const mode=document.getElementById("xtMode").value; xtModeUsed=mode;
+  const mode0=document.getElementById("xtMode").value; const mode=(mode0==="SEM1S")?"SEM1":mode0; xtModeUsed=mode; xtSuppMode=(mode0==="SEM1S"||mode0==="COMB");
   const box=document.getElementById("xtBox"); box.className="lockbox"; box.textContent="Loading marks…";
   const subs=SUBJECTS.filter(c=>SCHEMES[c] && subjectColumnExistsInData(c) && students.some(st=>studentTakesSubject(st,c)));
   if(!subs.length){ box.textContent="Could not determine subject enrolment from the imported XI-REG data."; return; }
@@ -2646,6 +2667,14 @@ async function generateXiTab(){
       d.pending.filter(x=>need.includes(x)).forEach(x=>xtPending.push(`${c} ${e==="SEM1"?"Sem I":"Sem II"}${x?" ("+x+")":""}`));
     });
   }catch(err){ box.textContent="Could not load marks: "+err.message; return; }
+  if(xtSuppMode&&(mode==="SEM1"||mode==="COMB")){
+    try{
+      const spm=await Promise.all(subs.map(c=>fetchMarksMerged("SUPP",c)));
+      subs.forEach((c,i)=>{ const m=data[c].SEM1; if(!m) return; const th=SCHEMES[c].theory;
+        spm[i].lockedRows.forEach(sr=>{ const k=studentKey(sr.student), sv=sr.theory; if(sv===""||sv===undefined||sv===null) return;
+          const r=m[k]; if(!r||r.theory===""||r.theory===undefined||r.theory===null||Number(r.theory)<xtPassMin(th)) m[k]=Object.assign({},r||{student:sr.student},{theory:sv,sup:true}); }); });
+    }catch(err){ box.textContent="Could not load supplementary marks: "+err.message; return; }
+  }
   xtCols=subs;
   xtRows=students.map(st=>{
     const k=studentKey(st); let total=0,fm=0,fail=0,abs=0,missing=0,n=0;
@@ -3068,7 +3097,7 @@ async function loadProgramme(){
 }
 async function persistProgramme(){
   sortProgramme();
-  await db.collection("mpStudents").doc("mpConfig").set({programme:PROGRAMME,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+  await db.collection("mpStudents").doc("mpConfig").set({programme:PROGRAMME,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
   populateSubjects();renderProgramme();updateDashboard();
 }
 function renderProgramme(){
@@ -3983,9 +4012,9 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
       '</div></div>';
   }
   /* Print ONLY the marksheet. New tab first; hidden iframe if the browser blocks pop-ups. */
-  function print(html,title){
+  function print(html,title,opt){ opt=opt||{};
     const doc='<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+esc(title||'Marksheet')+'</title><style>'+CSS+
-      '@page{size:A4 portrait;margin:10mm}html,body{margin:0;padding:0;background:#fff}body{padding:0}.ms{max-width:none}.ms-in{min-width:0}.ms-wrap{overflow:visible}</style></head><body>'+html+'</body></html>';
+      (opt.css?opt.css:'@page{size:A4 portrait;margin:10mm}')+'html,body{margin:0;padding:0;background:#fff}body{padding:0}.ms{max-width:none}.ms-in{min-width:0}.ms-wrap{overflow:visible}</style></head><body>'+html+'</body></html>';
     let w=null; try{ w=window.open('','_blank'); }catch(e){}
     if(w&&w.document){
       w.document.open(); w.document.write(doc); w.document.close();
@@ -4184,11 +4213,15 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
       const fullReady=s1&&s2;
 
       /* ---- which stage to show ---- */
+      let pub={}; try{ const pc=await db.collection('students').doc('xiConfig').get(); pub=(pc.exists&&pc.data().publish)||{}; }catch(e){ pub={}; }
+      const okSem1=!!pub.sem1, okSupp=!!pub.supp&&sp, okFull=!!pub.full&&fullReady;
+      if(!okSem1&&!okSupp&&!okFull){ msg(pub.note||'Result is not published yet. Please wait for the school\'s announcement.'); return; }
       let want=$('rvExam').value; if(!['SEM1','SEM1S','COMB'].includes(want)) want='AUTO';
-      let mode=want==='AUTO'?(fullReady?'COMB':(sp?'SEM1S':'SEM1')):want;
+      const bestM=okFull?'COMB':okSupp?'SEM1S':'SEM1';
+      let mode=want==='AUTO'?bestM:want;
       let note='';
-      if(mode==='COMB'&&!fullReady){ note='Full Result is not available yet — it opens when the finalised marks of Semester I and Semester II of all your subjects are available. Showing the latest available result.'; mode=sp?'SEM1S':'SEM1'; }
-      if(mode==='SEM1S'&&!sp){ note='Supplementary marks are not published yet. Showing the Semester I result.'; mode='SEM1'; }
+      const allowedM=m=>m==='COMB'?okFull:m==='SEM1S'?okSupp:okSem1;
+      if(!allowedM(mode)){ note=(mode==='COMB'?'Full Result is not available yet':mode==='SEM1S'?'Supplementary result is not available yet':'Semester I result is not released')+' — showing the latest released result.'; mode=bestM; }
       const useSupp=(mode!=='SEM1');
 
       /* ---- per-subject marks (Supplementary replaces a failed / absent Sem I theory mark) ---- */
@@ -4269,8 +4302,8 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
 
       /* ---- stage tracker + actions (screen only) ---- */
       const chip=(on,t)=>'<span class="'+(on?'on':'')+'">'+(on?'✔ ':'⏳ ')+t+'</span>';
-      const stages='<div class="rv-stages noprint">'+chip(s1,'Semester I')+chip(sp,'Supplementary')+chip(s2,'Semester II'+(s2any&&!s2?' (partial)':''))+chip(fullReady,'Full Result')+'</div>';
-      const fullBtn=(fullReady&&mode!=='COMB')?'<button class="btn" id="rvFull">View Full Result</button> ':(!fullReady?'<button class="btn secondary" disabled title="Opens when Semester II marks of all subjects are finalised">Full Result — awaiting Semester II</button> ':'');
+      const stages='<div class="rv-stages noprint">'+chip(okSem1,'Semester I')+chip(okSupp,'Supplementary')+chip(okFull,'Full Result')+'</div>';
+      const fullBtn=(okFull&&mode!=='COMB')?'<button class="btn" id="rvFull">View Full Result</button> ':(!okFull?'<button class="btn secondary" disabled>Full Result — not yet released</button> ':'');
       $('rvOut').innerHTML='<div class="panel">'+stages+'<div class="ms-wrap">'+html+'</div><div class="toolbar noprint" style="margin-top:12px">'+fullBtn+'<button class="btn secondary" id="rvPrint">🖨 Print Marksheet</button></div></div>';
       $('rvPrint').onclick=()=>MS.print(lastHtml,lastTitle);
       const fb=$('rvFull'); if(fb) fb.onclick=()=>{ $('rvExam').value='COMB'; go(); };
@@ -4472,6 +4505,8 @@ function parseListPages(pages){
         const hits=stuX.filter(s=>(!q.bs||normBs(regX(s))===q.bs)&&(!q.dob||dobX(s)===q.dob)&&(!q.roll||String(rollX(s)).trim().toUpperCase()===q.roll)&&(!q.sec||secX(s)===q.sec));
         if(!hits.length){ msg('No matching record found. Please check the details you entered. If your Date of Birth is not on record, contact the school.'); return; }
         if(hits.length>1){ msg('More than one student matches. Please fill in one more detail (for example Section).'); return; }
+        let pubX={}; try{ const pc=await db.collection('mpStudents').doc('mpConfig').get(); pubX=(pc.exists&&pc.data().publish)||{}; }catch(e){ pubX={}; }
+        if(!pubX.result){ msg(pubX.note||'Result is not published yet. Please wait for the school\'s announcement.'); return; }
         const st=hits[0], lang=langX(st), choice=$('rvxSub').value;
         /* Traditional order: 1st language, 2nd language, science group (Maths, Physical Science, Life Science), then History, Geography */
         const ORD=['BNGA','SANT','ENGB','MATH','PHYS','BIOS','HIST','GEGR'];
@@ -4897,6 +4932,183 @@ function parseListPages(pages){
   addButtons(); let n=0; const t=setInterval(()=>{ addButtons(); if(++n>10) clearInterval(t); },1500);
 })();
 </script>
+
+<script>
+/* ===================== (1) RESULT PUBLICATION CONTROL  (2) SUPPLEMENTARY LISTS  (3) OFFICE-RECORD A4 LANDSCAPE PRINT ===================== */
+(function(){
+  const $=id=>document.getElementById(id);
+  const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const today=()=>new Date().toLocaleDateString('en-GB');
+
+  /* ---------- (1) Admin: who can view what ---------- */
+  function pubPanel(hostId,docRef,flags,title){
+    const host=$(hostId); if(!host) return;
+    const d=document.createElement('div'); d.className='panel rv-pub'; d.style.display='none';
+    d.innerHTML='<h3 style="margin:0 0 6px">🔐 Result Publication Control — '+esc(title)+'</h3>'+
+      '<div class="subtitle" style="margin-bottom:8px">Students can see only what is switched ON here, even if they already hold the link. Switch ON only when the result is ready; switch OFF any time to stop viewing.</div>'+
+      '<div class="pub-flags">'+flags.map(f=>'<label style="display:inline-flex;align-items:center;gap:6px;margin:4px 18px 4px 0;font-size:13px"><input type="checkbox" class="pub-f" data-k="'+f[0]+'"> <b>'+esc(f[1])+'</b> <span class="pub-s" style="font-size:11px"></span></label>').join('')+'</div>'+
+      '<div class="toolbar" style="margin-top:8px"><div class="field" style="flex:1;min-width:240px"><label>Message shown to students when closed (optional)</label><input class="pub-note" placeholder="e.g. Result will be published soon — রেজাল্ট শীঘ্রই প্রকাশিত হবে"></div>'+
+      '<button class="btn success pub-save">Save</button> <button class="btn light pub-off">Switch all OFF</button></div><div class="rv-note pub-msg"></div>';
+    const anchor=host.querySelector('.rv-dashlinks'); const sub=host.querySelector('.subtitle');
+    (anchor||sub||host.firstChild).insertAdjacentElement('afterend',d);
+    const paint=()=>d.querySelectorAll('.pub-f').forEach(c=>{ const s=c.parentElement.querySelector('.pub-s'); s.textContent=c.checked?'🟢 OPEN':'🔴 CLOSED'; s.style.color=c.checked?'#166534':'#b91c1c'; });
+    d.querySelectorAll('.pub-f').forEach(c=>c.onchange=paint);
+    let loaded=false;
+    async function load(){
+      try{ const s=await db.collection(docRef[0]).doc(docRef[1]).get(); const p=(s.exists&&s.data().publish)||{};
+        d.querySelectorAll('.pub-f').forEach(c=>c.checked=!!p[c.dataset.k]); d.querySelector('.pub-note').value=p.note||''; paint(); loaded=true;
+        d.querySelector('.pub-msg').textContent=p.updatedAt?'Last saved: '+new Date(p.updatedAt).toLocaleString('en-GB'):'Nothing published yet — students currently see "not published".';
+      }catch(e){ d.querySelector('.pub-msg').textContent='Could not load status: '+e.message; }
+    }
+    async function save(all){
+      if(!isAdmin()){ alert('Administrator permission required.'); return; }
+      const p={}; d.querySelectorAll('.pub-f').forEach(c=>{ if(all) c.checked=false; p[c.dataset.k]=c.checked; });
+      p.note=d.querySelector('.pub-note').value.trim(); p.updatedAt=Date.now(); p.updatedBy=(currentUser&&currentUser.email)||'';
+      try{ await db.collection(docRef[0]).doc(docRef[1]).set({publish:p},{merge:true}); paint(); d.querySelector('.pub-msg').textContent='Saved ✔ '+new Date().toLocaleTimeString('en-GB'); }
+      catch(e){ alert('Save failed: '+e.message); }
+    }
+    d.querySelector('.pub-save').onclick=()=>save(false);
+    d.querySelector('.pub-off').onclick=()=>{ if(confirm('Switch OFF all result viewing for students?')) save(true); };
+    paint();
+    setInterval(()=>{ const a=typeof isAdmin==='function'&&isAdmin(); d.style.display=a?'block':'none'; if(a&&!loaded) load(); },1500);
+  }
+  pubPanel('dashboard',['students','xiConfig'],[['sem1','Semester I result'],['supp','Supplementary (combined with Sem I)'],['full','Full Result (Sem I + II)']],'Class XI');
+  pubPanel('mp_dashboard',['mpStudents','mpConfig'],[['result','Class X result']],'Class X (MP SE 2027)');
+
+  /* ---------- shared: paginated A4-landscape office print ---------- */
+  function paginate(cfg){
+    const per=Math.max(8,Number(cfg.perPage)||24), pages=[];
+    cfg.groups.forEach(g=>{
+      const rows=g.rows.length?g.rows:['<tr><td colspan="30">No records.</td></tr>'];
+      for(let i=0;i<rows.length;i+=per) pages.push({g,rows:rows.slice(i,i+per),first:i===0,last:i+per>=rows.length});
+    });
+    return pages;
+  }
+  function printPro(cfg){
+    const pages=paginate(cfg), n=pages.length;
+    const cols=cfg.cols||20, fs=cols>30?6.6:cols>24?7.2:cols>18?8:9;
+    const left=(cfg.leftCols||[]).map(i=>'table.tb td:nth-child('+i+'){text-align:left;white-space:nowrap}').join('');
+    const css='@page{size:A4 landscape;margin:8mm}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+      '.pg{page-break-after:always}.pg:last-child{page-break-after:auto}'+
+      '.ph{text-align:center;border-bottom:1.5px solid #000;padding-bottom:3px;margin-bottom:4px}.sn{font-size:14px;font-weight:700;letter-spacing:.3px}.pt{font-size:11.5px;font-weight:700;margin-top:1px}.ps{font-size:8.5px;color:#333;margin-top:1px}.gh{font-size:11px;font-weight:700;margin-top:2px}.prov{font-size:8.5px;color:#b42318;font-weight:700;margin-top:1px}'+
+      'table.tb{width:100%;border-collapse:collapse}table.tb th,table.tb td{border:.6px solid #333;padding:1.1mm 1mm;text-align:center;font-size:'+fs+'px;line-height:1.15}table.tb th{background:#e8edf3;font-weight:700}table.tb tr{page-break-inside:avoid}'+left+
+      '.badge{font-weight:700}.badge.fail{color:#b42318}.badge.pass{color:#146c2e}.badge.absent{color:#92400e}'+
+      '.sg{display:flex;justify-content:space-between;margin-top:11mm;font-size:9px}.sg div{border-top:1px solid #000;padding-top:2px;min-width:60mm;text-align:center}'+
+      '.pf{display:flex;justify-content:space-between;font-size:8px;color:#333;border-top:.6px solid #777;margin-top:3px;padding-top:2px}';
+    const html=pages.map((p,i)=>'<div class="pg"><div class="ph"><div class="sn">TALDANGRA FULMATI HIGH SCHOOL [H.S.]</div><div class="pt">'+esc(cfg.title)+'</div>'+
+      (cfg.sub?'<div class="ps">'+esc(cfg.sub)+'</div>':'')+(p.g.heading?'<div class="gh">'+esc(p.g.heading)+(p.first?'':' (contd.)')+'</div>':'')+
+      (cfg.provisional?'<div class="prov">'+esc(cfg.provisional)+'</div>':'')+'</div>'+
+      '<table class="tb"><thead>'+p.g.thead+'</thead><tbody>'+p.rows.join('')+'</tbody></table>'+
+      (p.last?'<div class="sg"><div>Prepared by</div><div>Checked by</div><div>Head of the Institution</div></div>':'')+
+      '<div class="pf"><span>Taldangra Fulmati High School [H.S.] — Office record • Printed on '+today()+'</span><span>Page '+(i+1)+' of '+n+'</span></div></div>').join('');
+    window.TFHS_MS.print(html,cfg.title,{css:css});
+  }
+  const fromTable=t=>({thead:[...t.tHead.rows].map(r=>r.outerHTML).join(''),rows:[...t.tBodies[0].rows].map(r=>r.outerHTML),cols:[...t.tHead.rows[0].cells].reduce((s,c)=>s+(c.colSpan||1),0),hrows:t.tHead.rows.length});
+  const rppField=(id)=>'<div class="field"><label>Rows / page</label><select id="'+id+'"><option value="0">Auto</option><option>16</option><option>20</option><option>24</option><option>28</option><option>32</option><option>36</option><option>40</option></select></div>';
+  const perPage=(id,hrows)=>{ const v=Number(($(id)||{}).value)||0; return v||(hrows>1?20:24); };
+
+  /* ---------- (3) tabulation sheets: replace plain print by the professional paginated print ---------- */
+  function addRpp(btnMatch,id){
+    const b=[...document.querySelectorAll('button')].find(x=>(x.getAttribute('onclick')||'').includes(btnMatch)); if(!b||$(id)) return;
+    const w=document.createElement('div'); w.innerHTML=rppField(id); b.parentElement.insertBefore(w.firstChild,b);
+  }
+  addRpp('printXiTab','xtRpp'); addRpp('MP.printTabulation','mpRpp');
+  window.printXiTab=function(){
+    if(!xtRows.length){ alert('Generate the tabulation sheet first.'); return; }
+    const f=fromTable($('xtTable')), so=$('xtSort').value==='rank'?'Rank-wise':'Roll / Reg-wise', sx=$('xtSex').value, med=($('xtMedium')||{}).value||'ALL';
+    printPro({title:'CLASS XI — '+XT_LABEL[xtModeUsed]+(xtSuppMode&&xtModeUsed==='SEM1'?' WITH SUPPLEMENTARY':'')+' — TABULATION SHEET ('+so+')',
+      sub:'Medium: '+med+'  |  Sex: '+sx+'  |  Th = Theory, Pr = Practical, Pj = Project, S1/S2 = Semester I/II, AB = Absent, · = subject not taken  |  Pass: 30% in each component'+(xtModeUsed==='COMB'?'  |  Best of Five: 2 languages + best 3 electives = 500':''),
+      provisional:xtPending.length?'PROVISIONAL — marks not yet locked for: '+[...new Set(xtPending)].join(', '):'',
+      groups:[{thead:f.thead,rows:f.rows}],cols:f.cols,leftCols:[4],perPage:perPage('xtRpp',f.hrows)});
+  };
+  if(window.MP) window.MP.printTabulation=function(){
+    if(!tabRowsCount()){ alert('Generate the tabulation sheet first.'); return; }
+    const f=fromTable($('mp_tabTable')), so=$('mp_tabSort').value==='rank'?'Rank-wise':'Section / Roll-wise';
+    printPro({title:'MP (SE) 2027 SELECTION TEST — TABULATION SHEET ('+so+')',
+      sub:'Class X  |  Medium: '+(($('mp_tabMedium')||{}).value||'ALL')+'  |  Section: '+$('mp_tabSec').value+'  |  Sex: '+$('mp_tabSex').value+'  |  Full Marks per subject: 100 (Written 90 + IFE 10)  |  Pass Mark: 25  |  AB = Absent',
+      provisional:$('mp_tabBox')&&/PROVISIONAL/.test($('mp_tabBox').textContent)?$('mp_tabBox').textContent.replace(/^⚠\s*/,''):'',
+      groups:[{thead:f.thead,rows:f.rows}],cols:f.cols,leftCols:[6],perPage:perPage('mpRpp',f.hrows)});
+  };
+  function tabRowsCount(){ const b=$('mp_tabBody'); return b&&b.rows.length&&b.rows[0].cells.length>3; }
+
+  /* ---------- (2) Supplementary lists (Class XI, Semester I) ---------- */
+  const ORDER=['BNGA','SANT','ENGB','PHYS','CHEM','MATH','BIOS','COMS','COMA','HIST','GEGR','PHIL','POLS','SNSK'];
+  const oi=c=>{ const i=ORDER.indexOf(c); return i<0?99:i; };
+  const LANGS=['BNGA','SANT','ENGB'], pm=m=>Math.ceil(m*0.30);
+  let SP=null;
+  const rollN=st=>Number(getStudentRoll(st))||0;
+  async function spGenerate(){
+    if(!canResult()){ alert('Result permission required.'); return; }
+    if(!students.length){ alert('Please load the Class XI students first.'); return; }
+    const box=$('spBox'); box.className='lockbox'; box.textContent='Loading Semester I marks…';
+    const subs=Object.keys(SCHEMES).filter(c=>subjectColumnExistsInData(c)&&students.some(st=>studentTakesSubject(st,c))).sort((a,b)=>oi(a)-oi(b));
+    let merged; try{ merged=await Promise.all(subs.map(c=>fetchMarksMerged('SEM1',c))); }catch(e){ box.textContent='Could not load marks: '+e.message; return; }
+    const maps={}; subs.forEach((c,i)=>{ const m={}; merged[i].lockedRows.forEach(r=>m[studentKey(r.student)]=r); maps[c]=m; });
+    const inclAll=$('spAll').checked, pend=new Set(), out=[];
+    students.forEach(st=>{
+      const k=studentKey(st), items=[];
+      subs.forEach(c=>{
+        if(!studentTakesSubject(st,c)) return;
+        const th=SCHEMES[c].theory, r=maps[c][k];
+        if(!r){ pend.add(c); items.push({c,th,state:'P',lang:LANGS.includes(c)}); return; }
+        const blank=(r.theory===''||r.theory===undefined||r.theory===null), t=blank?0:Number(r.theory)||0;
+        items.push({c,th,state:blank?'A':'M',t,ok:!blank&&t>=pm(th),lang:LANGS.includes(c)});
+      });
+      const L=items.filter(o=>o.lang), E=items.filter(o=>!o.lang);
+      const best=E.filter(o=>o.state==='M'||o.state==='A').sort((a,b)=>((b.ok?1:0)-(a.ok?1:0))||((b.t||0)-(a.t||0))).slice(0,3);
+      const counted=new Set(L.concat(E.length>3?best:E).map(o=>o.c));
+      const need=items.filter(o=>(inclAll||counted.has(o.c))&&(o.state==='A'||(o.state==='M'&&!o.ok)));
+      if(need.length) out.push({st,need});
+    });
+    out.sort((a,b)=>rollN(a.st)-rollN(b.st));
+    SP={subs,out,pend:[...pend],inclAll};
+    const sel=$('spSub'), cur=sel.value; sel.innerHTML='<option value="*">All subjects</option>'+subs.map(c=>'<option value="'+c+'">'+esc((XI_NAMES[c]||c)+' ('+c+')')+'</option>').join(''); if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
+    box.className='lockbox'+(SP.pend.length?'':' ok');
+    box.textContent=(SP.pend.length?'⚠ PROVISIONAL — Semester I marks not locked for: '+SP.pend.join(', ')+'. ':'✅ All Semester I marks are locked. ')+out.length+' student(s) must appear in the Supplementary Examination.';
+    spRender();
+  }
+  const mark=o=>o.state==='A'?'AB':o.t;
+  const medL=st=>studentTakesSubject(st,'SANT')?'Santali':'Bengali';
+  function spGroups(){
+    if(!SP) return null;
+    if($('spMode').value==='full'){
+      const thead='<tr><th>SL</th><th>Roll</th><th>Registration No.</th><th>Name</th><th>Sex</th><th>Subjects to appear (Sem I marks)</th><th>No. of Subjects</th><th>Signature of Candidate</th></tr>';
+      const rows=SP.out.map((x,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(getStudentRoll(x.st))+'</td><td>'+esc(getStudentReg(x.st))+'</td><td style="text-align:left;white-space:nowrap">'+esc(getStudentName(x.st))+'</td><td>'+esc(getStudentSex(x.st))+'</td><td>'+x.need.map(o=>esc(o.c)+' ('+mark(o)+'/'+o.th+')').join(', ')+'</td><td>'+x.need.length+'</td><td style="min-width:34mm">&nbsp;</td></tr>');
+      return {groups:[{thead,rows}],leftCols:[4,6],cols:8,mode:'full'};
+    }
+    const only=$('spSub').value, list=SP.subs.filter(c=>only==='*'||c===only), groups=[];
+    list.forEach(c=>{
+      const rs=SP.out.map(x=>({x,o:x.need.find(o=>o.c===c)})).filter(z=>z.o);
+      const thead='<tr><th>SL</th><th>Roll</th><th>Registration No.</th><th>Name</th><th>Sex</th><th>Medium</th><th>Sem I Marks</th><th>Full Marks</th><th>Pass Marks</th><th>Supplementary Marks</th><th>Signature</th></tr>';
+      const rows=rs.map((z,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(getStudentRoll(z.x.st))+'</td><td>'+esc(getStudentReg(z.x.st))+'</td><td style="text-align:left;white-space:nowrap">'+esc(getStudentName(z.x.st))+'</td><td>'+esc(getStudentSex(z.x.st))+'</td><td>'+medL(z.x.st)+'</td><td>'+(z.o.state==='A'?'<b style="color:#b42318">AB</b>':z.o.t)+'</td><td>'+z.o.th+'</td><td>'+pm(z.o.th)+'</td><td style="min-width:22mm">&nbsp;</td><td style="min-width:30mm">&nbsp;</td></tr>');
+      if(rows.length||only!=='*') groups.push({heading:'SUBJECT: '+(XI_NAMES[c]||c)+' ('+c+') — '+rows.length+' candidate(s)',thead,rows});
+    });
+    return {groups,leftCols:[4],cols:11,mode:'sub'};
+  }
+  function spRender(){
+    const g=spGroups(), out=$('spOut'); if(!g){ out.innerHTML='<div class="rv-note">Click Generate.</div>'; return; }
+    out.innerHTML=g.groups.map(x=>(x.heading?'<h3 style="margin:14px 0 6px">'+esc(x.heading)+'</h3>':'')+'<div class="tablewrap"><table><thead>'+x.thead+'</thead><tbody>'+(x.rows.join('')||'<tr><td colspan="12">No candidates.</td></tr>')+'</tbody></table></div>').join('')||'<div class="rv-note">No candidates.</div>';
+  }
+  function spPrint(){
+    const g=spGroups(); if(!g){ alert('Generate the list first.'); return; }
+    printPro({title:'CLASS XI — SEMESTER I SUPPLEMENTARY EXAMINATION — '+(g.mode==='full'?'LIST OF CANDIDATES (FULL LIST)':'SUBJECT-WISE LIST OF CANDIDATES'),
+      sub:'Candidates who could not clear Semester I (below 30% of theory marks or absent) in a counted subject'+(SP.inclAll?' (including additional subject)':'')+'  |  AB = Absent',
+      provisional:SP.pend.length?'PROVISIONAL — Semester I marks not yet locked for: '+SP.pend.join(', '):'',
+      groups:g.groups,cols:g.cols,leftCols:g.leftCols,perPage:perPage('spRpp',1)});
+  }
+  function spExcel(){
+    if(!SP){ alert('Generate the list first.'); return; }
+    const rows=[]; SP.out.forEach(x=>x.need.forEach(o=>rows.push({Roll:getStudentRoll(x.st),'Registration No.':getStudentReg(x.st),Name:getStudentName(x.st),Sex:getStudentSex(x.st),Medium:medL(x.st),'Subject Code':o.c,Subject:XI_NAMES[o.c]||o.c,'Sem I Marks':mark(o),'Full Marks':o.th,'Pass Marks':pm(o.th)})));
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Supplementary'); XLSX.writeFile(wb,'XI_Supplementary_List.xlsx');
+  }
+  (function(){
+    const sec=$('xisupp'); if(!sec) return;
+    sec.querySelector('#spGen').onclick=spGenerate; sec.querySelector('#spPrint').onclick=spPrint; sec.querySelector('#spXls').onclick=spExcel;
+    ['spMode','spSub'].forEach(id=>$(id).onchange=spRender); $('spAll').onchange=()=>{ if(SP) spGenerate(); };
+  })();
+})();
+</script>
+
 
 </body>
 </html>
