@@ -4846,5 +4846,57 @@ function parseListPages(pages){
 })();
 </script>
 
+<script>
+/* ===================== CLEAN ADDRESS BAR + QR CODE FOR STUDENT RESULT LINKS ===================== */
+(function(){
+  const P=new URLSearchParams(location.search), m=(P.get('m')||'').toLowerCase();
+  /* A refresh of a cleaned student link restores the same result window (this browser tab only) */
+  if(!location.search){
+    const saved=sessionStorage.getItem('tfhsResultQ');
+    if(saved){ location.replace(location.pathname+'?'+saved); return; }
+  }
+  if(m==='result'||m==='resultx'){
+    try{ sessionStorage.setItem('tfhsResultQ',location.search.slice(1)); history.replaceState(null,'',location.pathname); }catch(e){}
+  }else{
+    try{ sessionStorage.removeItem('tfhsResultQ'); }catch(e){}
+  }
+
+  /* QR button beside each result link on the admin dashboards */
+  const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function loadQr(){
+    if(window.QRCode) return Promise.resolve();
+    return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; s.onload=res; s.onerror=()=>rej(new Error('Could not load the QR library. Check internet.')); document.head.appendChild(s); });
+  }
+  async function showQr(url,label){
+    try{ await loadQr(); }catch(e){ alert(e.message); return; }
+    const bg=document.createElement('div');
+    bg.style.cssText='position:fixed;inset:0;background:#000a;z-index:99999;display:flex;align-items:center;justify-content:center;padding:14px';
+    bg.innerHTML='<div style="background:#fff;border-radius:14px;padding:18px;max-width:340px;width:100%;text-align:center"><div style="font-weight:800;margin-bottom:4px">'+esc(label)+'</div><div style="font-size:12px;color:#64748b;margin-bottom:10px">Students scan this to open the result window</div><div class="qr-box" style="display:flex;justify-content:center"></div><div class="toolbar" style="justify-content:center;margin-top:12px"><button class="btn qr-print">🖨 Print QR Poster</button> <button class="btn secondary qr-close">Close</button></div></div>';
+    document.body.appendChild(bg);
+    const box=bg.querySelector('.qr-box');
+    new QRCode(box,{text:url,width:240,height:240,correctLevel:QRCode.CorrectLevel.M});
+    bg.querySelector('.qr-close').onclick=()=>bg.remove();
+    bg.onclick=e=>{ if(e.target===bg) bg.remove(); };
+    bg.querySelector('.qr-print').onclick=()=>{
+      const cv=box.querySelector('canvas'), im=box.querySelector('img');
+      const src=(cv&&cv.toDataURL)?cv.toDataURL('image/png'):(im?im.src:'');
+      const html='<div style="text-align:center;font-family:Georgia,serif;padding:30px;border:3px double #1e3a5f;margin:20px"><div style="font-size:22px;font-weight:700;color:#1e3a5f">TALDANGRA FULMATI HIGH SCHOOL [H.S.]</div><div style="font-size:18px;margin:10px 0 18px">'+esc(label)+'</div><img src="'+src+'" style="width:340px;height:340px"><div style="font-size:16px;margin-top:16px">Scan this QR code to view your result</div><div style="font-size:14px;margin-top:6px">স্ক্যান করে আপনার রেজাল্ট দেখুন</div><div style="font-size:12px;color:#555;margin-top:10px">Keep ready: Registration No. / Date of Birth / Banglar Siksha ID / Roll No. (any two)</div></div>';
+      window.TFHS_MS.print(html,'QR — '+label);
+    };
+  }
+  function addButtons(){
+    document.querySelectorAll('.rv-dashlinks .toolbar').forEach(row=>{
+      if(row.querySelector('.rl-qr')) return;
+      const inp=row.querySelector('input.ml-url'); if(!inp) return;
+      const lab=(row.firstElementChild&&row.firstElementChild.textContent||'Result').replace(/^[^A-Za-z]+/,'').trim();
+      const b=document.createElement('button'); b.className='btn light rl-qr'; b.textContent='QR';
+      b.onclick=()=>showQr(inp.value,lab);
+      const c=row.querySelector('.rl-c'); (c||inp).insertAdjacentElement('afterend',b);
+    });
+  }
+  addButtons(); let n=0; const t=setInterval(()=>{ addButtons(); if(++n>10) clearInterval(t); },1500);
+})();
+</script>
+
 </body>
 </html>
