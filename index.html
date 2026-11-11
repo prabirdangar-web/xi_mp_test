@@ -288,6 +288,8 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
     <button onclick="showView('xitab',this)">📋 Tabulation &amp; Rank (XI)</button>
     <button onclick="showView('xires',this)">🏅 Result Sheet (XI) — Reg / Sex / Group</button>
     <button onclick="showView('xirank',this)">🏆 Merit List &amp; Rank (XI) — Sec-wise</button>
+    <button id="navBulk" style="display:none" onclick="showView('xibulk',this)">🖨 Bulk Marksheets — Sec-wise (Admin)</button>
+    <button id="navSchool" style="display:none" onclick="showView('xischool',this)">🏫 School Details (Admin)</button>
     <button onclick="showView('xisupp',this)">📝 Supplementary List (XI)</button>
     <button onclick="showView('analysis',this)">📊 Result Analysis</button>
     <button id="navSubjects" style="display:none" onclick="showView('subjects',this)">⚙️ Subjects (Admin)</button>
@@ -818,6 +820,58 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
   <div id="xmOut"><div class="panel"><div class="rv-note">Click Generate.</div></div></div>
 </section>
 
+<!-- XI BULK MARKSHEETS (Admin, section-wise) -->
+<section id="xibulk" class="view">
+  <div class="title">Bulk Marksheets — Section-wise (Admin)</div>
+  <div class="subtitle">Prints one marksheet per student on its own A4 page — Science (B), Arts (A), Santal (C) — Registration No. low → high. Uses locked marks only.</div>
+  <div class="panel">
+    <div class="toolbar">
+      <div class="field"><label>Result of</label>
+        <select id="xbMode"><option value="COMB">Full Result (Sem I + Sem II + Project/Practical)</option><option value="SEM1S">Semester I with Supplementary</option><option value="SEM1">Semester I</option></select></div>
+      <div class="field"><label>Section</label>
+        <select id="xbSec"><option value="B">Science — B Sec</option><option value="A">Arts — A Sec</option><option value="C">Santal — C Sec</option><option value="ALL">All sections (B, A, C)</option><option value="NONE">No section recorded</option></select></div>
+      <div class="field"><label>Reg. No. from</label><input id="xbFrom" style="width:130px" placeholder="optional"></div>
+      <div class="field"><label>Reg. No. to</label><input id="xbTo" style="width:130px" placeholder="optional"></div>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="xbDone" checked> Only students with complete marks</label>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="xbRank" checked> Show Rank in Section (PASS only)</label>
+      <button class="btn" onclick="xbGenerate()">Generate</button>
+      <button class="btn secondary" onclick="xbPrintAll()">Print All (A4 Portrait)</button>
+    </div>
+    <div id="xbBox" class="lockbox">Click Generate to prepare the marksheets.</div>
+  </div>
+  <div class="panel" id="xbSumPanel" style="display:none"><div class="tablewrap"><table><thead><tr><th>Section</th><th>Students</th><th>Pass</th><th>Fail / Absent</th><th>Marks awaited</th><th>Marksheets to print</th></tr></thead><tbody id="xbSumBody"></tbody></table></div></div>
+  <div class="panel" id="xbPrevPanel" style="display:none">
+    <div class="toolbar"><div class="field" style="flex:1;min-width:240px"><label>Preview student</label><select id="xbPrev" onchange="xbPreview()"></select></div></div>
+    <div id="xbPrevBox" class="ms-wrap"></div>
+  </div>
+</section>
+
+<!-- SCHOOL DETAILS (Admin) -->
+<section id="xischool" class="view">
+  <div class="title">School Details (Admin)</div>
+  <div class="subtitle">Shown in the header and footer of every marksheet, result sheet, merit list and tabulation. Saved to the database and used on the student result link too.</div>
+  <div class="panel">
+    <div class="toolbar" style="align-items:flex-end">
+      <div class="field" style="flex:1;min-width:260px"><label>School name</label><input id="sc_name"></div>
+      <div class="field" style="flex:1;min-width:260px"><label>Address line</label><input id="sc_addr"></div>
+      <div class="field"><label>PIN</label><input id="sc_pin" style="width:110px" maxlength="6"></div>
+    </div>
+    <div class="toolbar" style="align-items:flex-end">
+      <div class="field"><label>H.S. Code</label><input id="sc_hs" style="width:120px"></div>
+      <div class="field"><label>UDISE</label><input id="sc_udise" style="width:170px"></div>
+      <div class="field"><label>Session</label><input id="sc_session" style="width:110px"></div>
+      <div class="field"><label>Place (footer)</label><input id="sc_place" style="width:140px"></div>
+      <div class="field"><label>Phone</label><input id="sc_phone" style="width:150px"></div>
+      <div class="field" style="flex:1;min-width:200px"><label>Email</label><input id="sc_email"></div>
+    </div>
+    <div class="toolbar" style="align-items:flex-end">
+      <div class="field" style="flex:1;min-width:300px"><label>Affiliation line (H.S. documents)</label><input id="sc_affil"></div>
+      <button class="btn success" onclick="scSave()">Save School Details</button>
+    </div>
+    <div id="scMsg" class="rv-note">Blank fields are simply left out of the headers.</div>
+  </div>
+</section>
+
 <!-- ANALYSIS -->
 <section id="analysis" class="view">
   <div class="title">Result Analysis</div>
@@ -1138,6 +1192,20 @@ let marksRows = [];
 let combinedRows = [];
 let importedHeaders = [];
 
+/* SCHOOL DETAILS (editable by Admin, stored in students/xiConfig.school) */
+window.TFHS_SCHOOL={name:"Taldangra Fulmati High School [H.S.]",addr:"Taldangra, Bankura, West Bengal",pin:"",phone:"",email:"",hsCode:"114071",udise:"19132104401",affil:"Affiliated to the West Bengal Council of Higher Secondary Education",session:"2026-27",place:"Taldangra"};
+function schoolSubLines(forHS){
+  const S=window.TFHS_SCHOOL, l=[];
+  const a=[S.addr,S.pin?"PIN - "+S.pin:""].filter(Boolean).join(", "); if(a) l.push(a);
+  const c=[forHS&&S.hsCode?"H.S. Code: "+S.hsCode:"",S.udise?"UDISE: "+S.udise:""].filter(Boolean).join("  |  "); if(c) l.push(c);
+  if(forHS&&S.affil) l.push(S.affil);
+  const k=[S.phone?"Phone: "+S.phone:"",S.email?"Email: "+S.email:""].filter(Boolean).join("  |  "); if(k) l.push(k);
+  return l;
+}
+function schoolSubText(forHS){ return schoolSubLines(forHS).join("  |  "); }
+function schoolHdrHtml(forHS){ const S=window.TFHS_SCHOOL; return `<div class="school">${escapeHtml(String(S.name||"").toUpperCase())}</div>`+schoolSubLines(forHS).map(x=>`<div class="meta">${escapeHtml(x)}</div>`).join(""); }
+function schoolFootHtml(){ const S=window.TFHS_SCHOOL; return `<div class="pf">${S.place?escapeHtml(S.place)+" • ":""}Printed on ${new Date().toLocaleDateString("en-GB")} • Computer-generated sheet</div>`; }
+
 /* SUBJECT SCHEMES */
 let SCHEMES = {
   BNGA:{theory:40,practical:0,project:20},
@@ -1322,6 +1390,7 @@ function applyRoleUI(){
 
   const adminIds=["saveStudentsBtn","addStudentBtn","importDobBtn","deleteAttendanceBtn","deleteMarksBtn","unlockAttendanceBtn","unlockMarksBtn","unlockResultBtn"];
   const ns=document.getElementById("navSubjects"); if(ns) ns.style.display=isAdmin()?"block":"none";
+  ["navBulk","navSchool"].forEach(i=>{ const n=document.getElementById(i); if(n) n.style.display=isAdmin()?"block":"none"; });
   adminIds.forEach(id=>{const el=document.getElementById(id); if(el) el.style.display=isAdmin()?"inline-block":"none";});
 
   const marksSection=document.querySelector('.nav button[onclick*="showView(\'marks\'"]');
@@ -1380,6 +1449,7 @@ function showView(id,btn){
   if(id==="xitab" && !canResult()){ alert("Tabulation is restricted to authorised Staff/Teacher/Admin accounts."); return; }
   if(id==="xires" && !canResult()){ alert("Result Sheet is restricted to authorised Staff/Teacher/Admin accounts."); return; }
   if(id==="xirank" && !canResult()){ alert("Merit List is restricted to authorised Staff/Teacher/Admin accounts."); return; }
+  if((id==="xibulk"||id==="xischool") && !isAdmin()){ alert("This page is for Admin only."); return; }
   document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
   document.getElementById(id).classList.add("active");
 
@@ -1387,6 +1457,7 @@ function showView(id,btn){
   if(btn) btn.classList.add("active");
 
   if(id==="analysis") updateAnalysis();
+  if(id==="xischool") scFill();
 }
 
 /* SUBJECT SELECTS */
@@ -1769,6 +1840,7 @@ async function loadSubjectConfig(){
       SCHEMES=c.data().schemes; EXAM_SCHEDULE=c.data().schedule||{};
       refreshSubjectLists(); populateSubjects(); updateDashboard();
     }
+    if(c.exists && c.data().school) Object.assign(window.TFHS_SCHOOL,c.data().school);
   }catch(e){ console.warn("Subject config load:",e); }
   renderSubjects();
 }
@@ -2763,7 +2835,7 @@ async function generateXiTab(){
         const r=m[k]; if(!r){missing++;return{state:"P"}}
         if(isBlank(r.theory)){abs++;return{state:"A"}}
         const t=Number(r.theory)||0; total+=t; if(t<xtPassMin(th))fail++;
-        return{state:"M",parts:[t],t,fm:th};
+        return{state:"M",parts:[t],t,fm:th,sup:!!r.sup};
       }
       if(mode==="SEM2"){
         fm+=th+cm; const m=data[c].SEM2; if(m===null){missing++;return{state:"P"}}
@@ -2780,7 +2852,7 @@ async function generateXiTab(){
       const a=Number(r1.theory)||0,b=Number(r2.theory)||0,x=Number(r2.component)||0,t=a+b+x; total+=t;
       const ok=!(a<xtPassMin(th)||b<xtPassMin(th)||x<xtPassMin(cm));
       if(!ok)fail++;
-      return{state:"M",parts:[a,b,x],t,fm:th*2+cm,ok,code:c};
+      return{state:"M",parts:[a,b,x],t,fm:th*2+cm,ok,code:c,sup:!!r1.sup,blank:[isBlank(r1.theory),isBlank(r2.theory),isBlank(r2.component)]};
     });
     if(mode==="COMB"){
       /* WBCHSE Class XI rule: Grand Total = highest marks in FIVE subjects (2 languages + best 3 electives), Full Marks 500.
@@ -2884,7 +2956,7 @@ function printXiTab(){
   const med=(document.getElementById("xtMedium")||{}).value||"ALL";
   const note=xtPending.length?`<p style="text-align:center;color:#b91c1c;font-size:11px">PROVISIONAL — pending: ${[...new Set(xtPending)].map(escapeHtml).join(", ")}</p>`:"";
   const w=window.open("","_blank");
-  w.document.write(`<html><head><title>Class XI Tabulation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;padding:8px}h2,h3{text-align:center;margin:3px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #333;padding:3px 4px;font-size:9px;text-align:center}th{background:#eee}.badge{font-weight:700}</style></head><body><h2>TALDANGRA FULMATI HIGH SCHOOL [H.S.]</h2><h3>CLASS XI — ${XT_LABEL[xtModeUsed]} — TABULATION SHEET (${so})</h3><p style="text-align:center;font-size:11px">Medium: ${escapeHtml(med)} | Sex: ${escapeHtml(sx)} | Th = Theory, Pr = Practical, Pj = Project, AB = Absent, · = subject not taken</p>${note}${t.outerHTML}</body></html>`);
+  w.document.write(`<html><head><title>Class XI Tabulation</title><style>@page{size:A4 landscape;margin:8mm}body{font-family:Arial;padding:8px}h2,h3{text-align:center;margin:3px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #333;padding:3px 4px;font-size:9px;text-align:center}th{background:#eee}.badge{font-weight:700}</style></head><body><h2>${escapeHtml(String(TFHS_SCHOOL.name).toUpperCase())}</h2><p style="text-align:center;font-size:10px;margin:0">${escapeHtml(schoolSubText(true))}</p><h3>CLASS XI — ${XT_LABEL[xtModeUsed]} — TABULATION SHEET (${so})</h3><p style="text-align:center;font-size:11px">Medium: ${escapeHtml(med)} | Sex: ${escapeHtml(sx)} | Th = Theory, Pr = Practical, Pj = Project, AB = Absent, · = subject not taken</p>${note}${t.outerHTML}<p style="text-align:center;font-size:8.5px;color:#555;margin-top:6px">${TFHS_SCHOOL.place?escapeHtml(TFHS_SCHOOL.place)+" • ":""}Printed on ${new Date().toLocaleDateString("en-GB")} • Computer-generated sheet</p></body></html>`);
   w.document.close(); w.print();
 }
 function exportXiTab(){
@@ -3005,11 +3077,11 @@ function xrPrint(){
   const note=xtPending.length?`<div style="color:#b91c1c;font-size:10px;margin-top:3px">PROVISIONAL — marks not locked for: ${[...new Set(xtPending)].map(escapeHtml).join(", ")}</div>`:"";
   const tables=secs.map((sec,i)=>{
     const t=xrTable(sec,det);
-    const hdr=`<div class="school">TALDANGRA FULMATI HIGH SCHOOL [H.S.]</div><div class="exam">CLASS XI — ${XR_LABEL[xrModeSel]} — RESULT SHEET</div>`+
+    const hdr=`${schoolHdrHtml(true)}<div class="exam">CLASS XI — ${XR_LABEL[xrModeSel]} — RESULT SHEET</div>`+
       `<div class="grp">SUBJECT GROUP: ${escapeHtml(sec.gtitle)}${sec.sex!=="ALL"?" &nbsp;|&nbsp; "+xrSexTitle(sec.sex):""}</div>`+
       `<div class="meta">Order: ${order}${med!=="ALL"?" | Medium: "+escapeHtml(med):""} | ${xrSummary(sec).replace(/<\/?b>/g,"")}</div>`+
       `<div class="meta">AB = Absent, — = marks not available, · = subject not taken${xtModeUsed==="COMB"?", grey italic = 6th subject (not counted)":""}</div>`+note;
-    return `<table class="${newPage&&i?"pb":(i?"gap":"")}"><thead><tr><td class="dh" colspan="${t.ncols}">${hdr}</td></tr>${t.head}</thead><tbody>${t.body}</tbody><tfoot><tr><td class="df" colspan="${t.ncols}"><div class="sig"><span>Prepared by</span><span>Checked by</span><span>Headmaster</span></div></td></tr></tfoot></table>`;
+    return `<table class="${newPage&&i?"pb":(i?"gap":"")}"><thead><tr><td class="dh" colspan="${t.ncols}">${hdr}</td></tr>${t.head}</thead><tbody>${t.body}</tbody><tfoot><tr><td class="df" colspan="${t.ncols}"><div class="sig"><span>Prepared by</span><span>Checked by</span><span>Headmaster</span></div>${schoolFootHtml()}</td></tr></tfoot></table>`;
   }).join("");
   const w=window.open("","_blank");
   if(!w){ alert("Please allow pop-ups to print this sheet."); return; }
@@ -3020,7 +3092,7 @@ thead{display:table-header-group}tfoot{display:table-footer-group}tr{page-break-
 th,td{border:1px solid #333;padding:3px 4px;font-size:9.5px;text-align:center;vertical-align:middle}th{background:#eee}
 td.dh,td.df{border:0;padding:2px 0}.dh{text-align:center}.school{font-size:15px;font-weight:800}.exam{font-size:11.5px;font-weight:700;margin-top:2px}
 .grp{font-size:11px;font-weight:800;margin-top:4px}.meta{font-size:9.5px;margin-top:2px}
-.sig{display:flex;justify-content:space-between;padding-top:26px;font-size:10px;font-weight:600}
+.sig{display:flex;justify-content:space-between;padding-top:26px;font-size:10px;font-weight:600}.pf{font-size:8.5px;color:#555;margin-top:6px;text-align:center}
 .badge{font-weight:700}.badge.fail{color:#b42318}.badge.pass{color:#146c2e}.badge.absent{color:#92400e}
 </style></head><body>${tables}</body></html>`);
   w.document.close(); w.focus(); w.print();
@@ -3035,12 +3107,30 @@ function xmSec(st){
   v=v.charAt(0); return /[A-Z]/.test(v)?v:"";
 }
 function xmSecLabel(st){ const k=xmSec(st); return k?(k+(XM_NAME[k]?" — "+XM_NAME[k].charAt(0)+XM_NAME[k].slice(1).toLowerCase():"")):""; }
-function xmCompute(){
-  const passOnly=document.getElementById("xmPass").checked;
-  const key=r=>Math.round(r.pct*10000);
-  const ok=r=>r.result!=="INCOMPLETE"&&(!passOnly||r.result==="PASS");
+function xbPm(m){return Math.ceil(m*0.30)}
+/* WBCHSE best-of-five for one student row (same rule as the individual marksheet): 2 languages + best 3 electives, 6th subject not counted */
+function xbBest(r){
+  const LANGS=["BNGA","SANT","ENGB"], mode=xtModeUsed, rows=[];
+  xtCols.forEach((c,i)=>{ const x=r.cells[i]; if(!x||x.state==="N") return;
+    const sc=SCHEMES[c]||{theory:0}, th=sc.theory, cm=sc.practical||sc.project||0;
+    let ok; if(x.state==="M") ok=mode==="SEM1"?x.t>=xbPm(th):mode==="SEM2"?(x.parts[0]>=xbPm(th)&&x.parts[1]>=xbPm(cm)):!!x.ok;
+    rows.push({c,i,x,state:x.state,t:x.t,fm:x.fm!==undefined?x.fm:(mode==="SEM1"?th:mode==="SEM2"?th+cm:th*2+cm),ok,lang:LANGS.includes(c)}); });
+  const L=rows.filter(o=>o.lang), E=rows.filter(o=>!o.lang), anyP=rows.some(o=>o.state==="P");
+  const best=E.filter(o=>o.state==="M").sort((p,q)=>((q.ok?1:0)-(p.ok?1:0))||(q.t-p.t)).slice(0,3);
+  const cs=new Set(L.concat(E.length>3?best:E).map(o=>o.c)), cr=rows.filter(o=>cs.has(o.c));
+  const t5=cr.filter(o=>o.state==="M").reduce((a,o)=>a+o.t,0), fm5=cr.reduce((a,o)=>a+o.fm,0);
+  const langBad=L.some(o=>o.state==="M"&&!o.ok), langAbs=L.some(o=>o.state==="A");
+  const elBad=E.length>3?(best.some(o=>!o.ok)||best.length<3):E.some(o=>o.state==="M"&&!o.ok);
+  const elAbs=cr.some(o=>!o.lang&&o.state==="A");
+  const overall=anyP?"AWAITED":(langBad||elBad)?"FAIL":(langAbs||elAbs)?"ABSENT":"PASS";
+  return {rows,t5,fm5,pct:fm5?t5/fm5*100:0,overall,anyP,counted:anyP?null:cs,need:anyP?[]:cr.filter(o=>o.state==="A"||(o.state==="M"&&!o.ok)).map(o=>o.c)};
+}
+function xmCompute(passOnly){
+  if(passOnly===undefined) passOnly=document.getElementById("xmPass").checked;
+  xtRows.forEach(r=>{ r.b=xbBest(r); r.mSec=xmSec(r.student); r.mOverall=0; r.mSecRank=0; r.mSecCount=0; });
+  const key=r=>Math.round(r.b.pct*10000);
+  const ok=r=>!r.b.anyP&&(!passOnly||r.b.overall==="PASS");
   const assign=(list,prop)=>{ const s=list.slice().sort((a,b)=>key(b)-key(a)); s.forEach((r,i)=>{ r[prop]=(i>0&&key(r)===key(s[i-1]))?s[i-1][prop]:i+1; }); };
-  xtRows.forEach(r=>{ r.mSec=xmSec(r.student); r.mOverall=0; r.mSecRank=0; r.mSecCount=0; });
   const elig=xtRows.filter(ok); assign(elig,"mOverall");
   const by={}; elig.forEach(r=>{ (by[r.mSec]=by[r.mSec]||[]).push(r); });
   Object.keys(by).forEach(k=>{ if(!k) return; const l=by[k]; assign(l,"mSecRank"); l.forEach(r=>r.mSecCount=l.length); });
@@ -3060,7 +3150,7 @@ function xmRecompute(){
   const box=document.getElementById("xmBox"), tb=document.getElementById("xtBox");
   const ranked=xtRows.filter(r=>r.mOverall>0).length, noSec=xtRows.filter(r=>!"ABC".includes(r.mSec||"-")).length;
   box.className=tb.className;
-  box.textContent=tb.textContent+" Ranked "+ranked+" of "+xtRows.length+" students (ties share the same rank; rank is on percentage of the Grand Total)."+(noSec?" ⚠ "+noSec+" student(s) have no A/B/C section in their record — they get an Overall rank only.":"");
+  box.textContent=tb.textContent+" Ranked "+ranked+" of "+xtRows.length+" students (ties share the same rank; rank is on the percentage of the Best-of-Five Grand Total)."+(noSec?" ⚠ "+noSec+" student(s) have no A/B/C section in their record — they get an Overall rank only.":"");
   xmRender();
 }
 function xmLists(){
@@ -3073,16 +3163,16 @@ function xmLists(){
 }
 function xmTable(L,detail){
   const idx=detail?xtCols.map((c,i)=>i).filter(i=>L.rows.some(r=>r.cells[i].state!=="N")):[];
-  const head0=(L.kind==="all"?["Overall Rank","Sec","Sec Rank"]:["Sec Rank","Overall Rank"]).concat(["Registration No.","Name","Sex"],idx.map(i=>xtCols[i]),[xtModeUsed==="COMB"?"Grand Total (Best 5)":"Grand Total","Full Marks","%","Result"]);
+  const head0=(L.kind==="all"?["Overall Rank","Sec","Sec Rank"]:["Sec Rank","Overall Rank"]).concat(["Registration No.","Name","Sex"],idx.map(i=>xtCols[i]),["Grand Total (Best of 5)","Full Marks","%","Result"]);
   const head="<tr>"+head0.map(h=>`<th>${escapeHtml(h)}</th>`).join("")+"</tr>";
   const body=L.rows.map(r=>{
-    const s=r.student, cls=r.result==="PASS"?"pass":"fail";
+    const s=r.student, b=r.b, cls=b.overall==="PASS"?"pass":"fail";
     const rk=L.kind==="all"?`<td><b>${r.mOverall}</b></td><td>${escapeHtml(r.mSec||"—")}</td><td>${r.mSecRank||"—"}</td>`:`<td><b>${r.mSecRank}</b></td><td>${r.mOverall}</td>`;
     const cells=idx.map(i=>{ const c=r.cells[i];
       if(c.state==="N") return '<td style="color:#94a3b8">·</td>'; if(c.state==="P") return "<td>—</td>"; if(c.state==="A") return '<td style="color:#b91c1c"><b>AB</b></td>';
-      const dropped=(xtModeUsed==="COMB"&&c.counted===false);
+      const dropped=b.counted&&!b.counted.has(xtCols[i]);
       return `<td${dropped?' style="color:#94a3b8;font-style:italic"':(c.t<xtPassMin(c.fm)?' style="color:#b91c1c;font-weight:700"':"")}>${c.t}</td>`; }).join("");
-    return `<tr>${rk}<td>${escapeHtml(getStudentReg(s))}</td><td style="text-align:left;white-space:nowrap">${escapeHtml(getStudentName(s))}</td><td>${escapeHtml(getStudentSex(s))}</td>${cells}<td><b>${r.total}</b></td><td>${r.fm}</td><td>${r.pct.toFixed(2)}</td><td><span class="badge ${cls}">${r.result}</span></td></tr>`;
+    return `<tr>${rk}<td>${escapeHtml(getStudentReg(s))}</td><td style="text-align:left;white-space:nowrap">${escapeHtml(getStudentName(s))}</td><td>${escapeHtml(getStudentSex(s))}</td>${cells}<td><b>${b.t5}</b></td><td>${b.fm5}</td><td>${b.pct.toFixed(2)}</td><td><span class="badge ${cls}">${b.overall}</span></td></tr>`;
   }).join("");
   return {head,body,ncols:head0.length};
 }
@@ -3098,9 +3188,9 @@ function xmPrint(){
   const det=document.getElementById("xmDetail").value==="sub", newPage=document.getElementById("xmNewPage").checked, pass=document.getElementById("xmPass").checked;
   const note=xtPending.length?`<div style="color:#b91c1c;font-size:10px;margin-top:3px">PROVISIONAL — marks not locked for: ${[...new Set(xtPending)].map(escapeHtml).join(", ")}</div>`:"";
   const tables=xmLists().map((L,i)=>{ const t=xmTable(L,det);
-    const hdr=`<div class="school">TALDANGRA FULMATI HIGH SCHOOL [H.S.]</div><div class="exam">CLASS XI — ${XR_LABEL[xmModeSel]}</div><div class="grp">${escapeHtml(L.title)}</div>`+
+    const hdr=`${schoolHdrHtml(true)}<div class="exam">CLASS XI — ${XR_LABEL[xmModeSel]}</div><div class="grp">${escapeHtml(L.title)}</div>`+
       `<div class="meta">Candidates ranked: ${L.rows.length} | ${pass?"Rank given to PASS candidates only":"Rank given to all candidates with complete marks"} | Equal marks share the same rank</div>`+note;
-    return `<table class="${newPage&&i?"pb":(i?"gap":"")}"><thead><tr><td class="dh" colspan="${t.ncols}">${hdr}</td></tr>${t.head}</thead><tbody>${t.body}</tbody><tfoot><tr><td class="df" colspan="${t.ncols}"><div class="sig"><span>Prepared by</span><span>Checked by</span><span>Headmaster</span></div></td></tr></tfoot></table>`; }).join("");
+    return `<table class="${newPage&&i?"pb":(i?"gap":"")}"><thead><tr><td class="dh" colspan="${t.ncols}">${hdr}</td></tr>${t.head}</thead><tbody>${t.body}</tbody><tfoot><tr><td class="df" colspan="${t.ncols}"><div class="sig"><span>Prepared by</span><span>Checked by</span><span>Headmaster</span></div>${schoolFootHtml()}</td></tr></tfoot></table>`; }).join("");
   const w=window.open("","_blank"); if(!w){ alert("Please allow pop-ups to print."); return; }
   w.document.write(`<html><head><title>Class XI Merit List</title><style>
 @page{size:A4 landscape;margin:8mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0}
@@ -3109,7 +3199,7 @@ thead{display:table-header-group}tfoot{display:table-footer-group}tr{page-break-
 th,td{border:1px solid #333;padding:3px 4px;font-size:10px;text-align:center;vertical-align:middle}th{background:#eee}
 td.dh,td.df{border:0;padding:2px 0}.school{font-size:15px;font-weight:800}.exam{font-size:11.5px;font-weight:700;margin-top:2px}
 .grp{font-size:12px;font-weight:800;margin-top:4px}.meta{font-size:9.5px;margin-top:2px}
-.sig{display:flex;justify-content:space-between;padding-top:26px;font-size:10px;font-weight:600}
+.sig{display:flex;justify-content:space-between;padding-top:26px;font-size:10px;font-weight:600}.pf{font-size:8.5px;color:#555;margin-top:6px;text-align:center}
 .badge{font-weight:700}.badge.fail{color:#b42318}.badge.pass{color:#146c2e}.badge.absent{color:#92400e}
 </style></head><body>${tables}</body></html>`);
   w.document.close(); w.focus(); w.print();
@@ -3126,6 +3216,106 @@ async function xmSave(){
     try{ await ref.update({["ranks."+xmModeSel]:data}); }catch(e){ await ref.set({ranks:{[xmModeSel]:data}},{merge:true}); }
     alert("Saved. The individual marksheet now shows the Rank in Section for "+Object.keys(map).length+" students ("+XR_LABEL[xmModeSel]+").");
   }catch(e){ alert("Could not save ranks: "+e.message); }
+}
+
+/* ===== SCHOOL DETAILS (Admin) ===== */
+const SC_FIELDS={sc_name:"name",sc_addr:"addr",sc_pin:"pin",sc_hs:"hsCode",sc_udise:"udise",sc_session:"session",sc_place:"place",sc_phone:"phone",sc_email:"email",sc_affil:"affil"};
+function scFill(){ Object.keys(SC_FIELDS).forEach(id=>{ const e=document.getElementById(id); if(e) e.value=TFHS_SCHOOL[SC_FIELDS[id]]||""; }); }
+async function scSave(){
+  if(!isAdmin()){ alert("Only Admin can change school details."); return; }
+  const o={}; Object.keys(SC_FIELDS).forEach(id=>{ o[SC_FIELDS[id]]=(document.getElementById(id).value||"").trim(); });
+  if(!o.name){ alert("School name cannot be blank."); return; }
+  const msg=document.getElementById("scMsg");
+  try{ await db.collection("students").doc("xiConfig").set({school:o},{merge:true}); Object.assign(TFHS_SCHOOL,o); msg.textContent="Saved ✔ "+new Date().toLocaleTimeString("en-GB"); }
+  catch(e){ msg.textContent="Could not save: "+e.message; }
+}
+
+/* ===== BULK MARKSHEETS, SECTION-WISE (Admin) ===== */
+const XB_ORDER=["BNGA","SANT","ENGB","PHYS","CHEM","MATH","BIOS","COMS","COMA","HIST","GEGR","PHIL","POLS","SNSK"];
+let xbModeSel="COMB", xbItems=[];
+function xbDob(v){
+  if(v===null||v===undefined||v==="") return ""; const p=n=>String(n).padStart(2,"0");
+  if(v instanceof Date&&!isNaN(v)) return p(v.getDate())+"-"+p(v.getMonth()+1)+"-"+v.getFullYear();
+  if(typeof v==="number"&&v>20000&&v<80000){ const d=new Date(Math.round((v-25569)*86400000)); return p(d.getUTCDate())+"-"+p(d.getUTCMonth()+1)+"-"+d.getUTCFullYear(); }
+  const t=String(v).trim(); let m;
+  if((m=/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/.exec(t))) return p(m[3])+"-"+p(m[2])+"-"+m[1];
+  if((m=/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/.exec(t))) return p(m[1])+"-"+p(m[2])+"-"+m[3];
+  return "";
+}
+function xbSheet(r,mode,showRank){
+  const MS=window.TFHS_MS, st=r.student, b=r.b, comb=mode==="COMB";
+  const ord=c=>{const i=XB_ORDER.indexOf(c);return i<0?99:i};
+  const items=b.rows.slice().sort((p,q)=>ord(p.c)-ord(q.c)||p.c.localeCompare(q.c));
+  const rows=items.map(o=>{ const x=o.x, th=SCHEMES[o.c].theory, dim=!!(b.counted&&!b.counted.has(o.c));
+    let a,bb,xx;
+    if(o.state==="M"){ if(comb){ const bl=x.blank||[false,false,false]; a=bl[0]?"AB":x.parts[0]; bb=bl[1]?"AB":x.parts[1]; xx=bl[2]?"AB":x.parts[2]; } else a=x.parts[0]; }
+    else if(o.state==="A"){ a=bb=xx="AB"; }
+    const cells=comb?[MS.cell(a,{sup:x.sup}),MS.cell(bb),MS.cell(xx),(o.state==="M"?"<b>"+o.t+"</b>":"&mdash;"),o.fm]:[o.fm,xbPm(th),MS.cell(a,{sup:x.sup})];
+    return {name:XI_NAMES[o.c]||o.c,code:o.c,cells,res:o.state==="P"?"AWAITED":o.state==="A"?"ABSENT":(o.ok?"PASS":"FAIL"),dim,tag:dim?"Additional subject — not counted in Best of Five":""};
+  });
+  const label=mode==="SEM1"?"SEMESTER I":mode==="SEM1S"?"SEMESTER I (WITH SUPPLEMENTARY)":"FULL RESULT (SEMESTER I + SEMESTER II)";
+  const nk=v=>String(v||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const fb=test=>{ const k=Object.keys(st).find(k=>test(nk(k))); return k?st[k]:""; };
+  const dob=xbDob(fb(k=>k==="dob"||k==="dateofbirth"||k==="birthdate"||k==="dateofbirthddmmyyyy"));
+  const bsd=String(fb(k=>k.includes("siksha")||k==="bsid"||k==="bsportalid")||"").replace(/\D/g,""), bs=bsd?bsd.padStart(14,"0"):"";
+  const father=String(fb(k=>k.includes("father")||k.includes("guardian"))||"").trim();
+  const summary=[], AW='<span class="ms-r-aw">Awaited</span>';
+  summary.push(["Grand Total (Best of Five)",b.anyP?AW:"<b>"+b.t5+"</b> out of <b>"+b.fm5+"</b>"]);
+  summary.push(["Percentage",b.anyP?AW:"<b>"+(b.fm5?b.pct.toFixed(2):"0.00")+" %</b>"]);
+  if(showRank&&!b.anyP&&r.mSecRank>0) summary.push(["Rank in Section "+r.mSec+(XM_NAME[r.mSec]?" ("+XM_NAME[r.mSec].charAt(0)+XM_NAME[r.mSec].slice(1).toLowerCase()+")":""),"<b>"+r.mSecRank+"</b> out of <b>"+r.mSecCount+"</b> <span style=\"font-size:11px;color:#555\">(section-wise merit)</span>"]);
+  const ov=b.overall;
+  summary.push(["Result",'<span class="ms-res">'+(ov==="AWAITED"?AW:ov==="PASS"?'<span class="ms-r-pass">PASSED</span>':ov==="ABSENT"?'<span class="ms-r-fail">ABSENT</span>':'<span class="ms-r-fail">NOT PASSED</span>')+"</span>"]);
+  const names=l=>l.map(c=>XI_NAMES[c]||c).join(", "), notes=[];
+  notes.push("Result follows the WBCHSE Class XI Semester System: Best of Five — two languages and best three electives; a 6th subject is optional and is not counted.");
+  notes.push(comb?"Minimum 30% is required separately in Semester I theory, Semester II theory and Practical/Project of each of the five counted subjects.":"Minimum 30% of the Semester I theory marks is required in each of the five counted subjects.");
+  if(items.some(o=>o.x&&o.x.sup)) notes.push("S — marks obtained in the Semester I Supplementary Examination (replaces the earlier Semester I mark).");
+  if(mode==="SEM1"&&b.need.length) notes.push("Not yet cleared: "+names(b.need)+". You may appear in the Semester I Supplementary Examination held along with Semester II.");
+  if(mode==="SEM1S"&&b.need.length) notes.push("Still not cleared after Supplementary: "+names(b.need)+".");
+  if(comb&&ov==="FAIL") notes.push("As per Regulation 8, a candidate who could not clear any subject may appear in the Supplementary Examination as notified by the school/Council.");
+  notes.push("AB = Absent. Only finalised (locked) marks are shown. For official results refer to the school.");
+  return MS.build({title:"Class XI — "+label,subtitle:TFHS_SCHOOL.session?"Session: "+TFHS_SCHOOL.session:"",
+    who:[["Name of Candidate",String(getStudentName(st)||"")],["Registration No.",String(getStudentReg(st)||"")],["Roll No.",String(getStudentRoll(st)||"")],["Section",xmSecLabel(st)],["Banglar Siksha ID",bs],["Sex",String(getStudentSex(st)||"")],["Date of Birth",dob],["Father's Name",father],["Medium",studentTakesSubject(st,"SANT")?"Santali":"Bengali"]],
+    head:comb?["Sem I Th.","Sem II Th.","Pr. / Pj.","Total","F.M."]:["Full Marks","Pass Marks","Marks Obtained"],
+    rows,summary,notes,provisional:b.anyP});
+}
+async function xbGenerate(){
+  if(!isAdmin()){ alert("Bulk marksheets are for Admin only."); return; }
+  const box=document.getElementById("xbBox");
+  xbModeSel=document.getElementById("xbMode").value; document.getElementById("xtMode").value=xbModeSel;
+  box.className="lockbox"; box.textContent="Loading marks…"; xtRows=[]; xbItems=[];
+  await generateXiTab();
+  if(!xtRows.length){ if(box.textContent==="Loading marks…") box.textContent="Could not prepare marksheets."; return; }
+  xmCompute(true);
+  const g=id=>document.getElementById(id).value, sec=g("xbSec"), from=g("xbFrom").trim(), to=g("xbTo").trim(), done=document.getElementById("xbDone").checked;
+  const reg=r=>String(getStudentReg(r.student)||"");
+  const inSec=r=>sec==="ALL"?"ABC".includes(r.mSec||"-"):sec==="NONE"?!"ABC".includes(r.mSec||"-"):r.mSec===sec;
+  const pool=xtRows.filter(r=>inSec(r)&&(!from||xrCmp(reg(r),from)>=0)&&(!to||xrCmp(reg(r),to)<=0));
+  xbItems=pool.filter(r=>!(done&&r.b.anyP));
+  const so=k=>{const i="BAC".indexOf(k||"-");return i<0?9:i};
+  xbItems.sort((a,b)=>so(a.mSec)-so(b.mSec)||xrCmp(reg(a),reg(b)));
+  const tb=document.getElementById("xtBox");
+  box.className=tb.className;
+  box.textContent=tb.textContent+" "+xbItems.length+" marksheet(s) ready"+(pool.length-xbItems.length?" — "+(pool.length-xbItems.length)+" skipped (marks awaited)":"")+".";
+  const rowsBy={}; pool.forEach(r=>{ const k=r.mSec||"—"; (rowsBy[k]=rowsBy[k]||[]).push(r); });
+  document.getElementById("xbSumBody").innerHTML=Object.keys(rowsBy).sort((a,b)=>so(a)-so(b)).map(k=>{ const l=rowsBy[k];
+    return `<tr><td>${escapeHtml(k)}${XM_NAME[k]?" — "+XM_NAME[k]:""}</td><td>${l.length}</td><td>${l.filter(r=>r.b.overall==="PASS").length}</td><td>${l.filter(r=>r.b.overall==="FAIL"||r.b.overall==="ABSENT").length}</td><td>${l.filter(r=>r.b.anyP).length}</td><td><b>${xbItems.filter(r=>(r.mSec||"—")===k).length}</b></td></tr>`; }).join("")||'<tr><td colspan="6">No students match.</td></tr>';
+  document.getElementById("xbSumPanel").style.display="";
+  const sel=document.getElementById("xbPrev");
+  sel.innerHTML=xbItems.map((r,i)=>`<option value="${i}">${escapeHtml(r.mSec||"—")} • ${escapeHtml(getStudentReg(r.student))} • ${escapeHtml(getStudentName(r.student))}</option>`).join("");
+  document.getElementById("xbPrevPanel").style.display=xbItems.length?"":"none";
+  xbPreview();
+}
+function xbPreview(){
+  const i=Number(document.getElementById("xbPrev").value), r=xbItems[i], box=document.getElementById("xbPrevBox");
+  box.innerHTML=r?xbSheet(r,xbModeSel,document.getElementById("xbRank").checked):"";
+}
+function xbPrintAll(){
+  if(!isAdmin()){ alert("Bulk marksheets are for Admin only."); return; }
+  if(!xbItems.length){ alert("Generate first — no marksheets to print."); return; }
+  if(xtPending.length&&!confirm("Some marks sheets are not locked yet ("+[...new Set(xtPending)].join(", ")+"). These marksheets may be provisional. Print anyway?")) return;
+  const rank=document.getElementById("xbRank").checked;
+  const html=xbItems.map(r=>'<div class="pg">'+xbSheet(r,xbModeSel,rank)+'</div>').join("");
+  window.TFHS_MS.print(html,"Class XI Marksheets — "+document.getElementById("xbSec").selectedOptions[0].text,{css:"@page{size:A4 portrait;margin:10mm}.pg{page-break-after:always;break-after:page}.pg:last-child{page-break-after:auto;break-after:auto}"});
 }
 
 /* ===== ATTENDANCE SUMMARY (shared by Class XI and Class X) ===== */
@@ -4282,6 +4472,15 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
     return esc(r||'');
   }
   /* o = {title, subtitle, who:[[label,value],...], head:[...], rows:[{name,code,cells:[html..],res,dim,tag}], summary:[[label,html],...], notes:[...], provisional:bool} */
+  const SCH=()=>window.TFHS_SCHOOL||{name:'Taldangra Fulmati High School [H.S.]',addr:'Taldangra, Bankura, West Bengal'};
+  function schoolLines(o){
+    const S=SCH(), hs=/^Class XI\b/i.test(o.title||''), l=[];
+    const a=[S.addr,S.pin?'PIN - '+S.pin:''].filter(Boolean).join(', '); if(a) l.push(a);
+    const c=[hs&&S.hsCode?'H.S. Code: '+S.hsCode:'',S.udise?'UDISE: '+S.udise:''].filter(Boolean).join(' | '); if(c) l.push(c);
+    if(hs&&S.affil) l.push(S.affil);
+    const k=[S.phone?'Phone: '+S.phone:'',S.email?'Email: '+S.email:''].filter(Boolean).join(' | '); if(k) l.push(k);
+    return l.map(x=>'<div class="ms-addr">'+esc(x)+'</div>').join('');
+  }
   function build(o){
     const who=(o.who||[]).filter(x=>x[1]!==''&&x[1]!==undefined&&x[1]!==null);
     let idRows='';
@@ -4295,13 +4494,13 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
     const notes=(o.notes&&o.notes.length)?'<ol class="ms-notes">'+o.notes.map(n=>'<li>'+esc(n)+'</li>').join('')+'</ol>':'';
     const today=new Date().toLocaleDateString('en-GB');
     return '<div class="ms"><div class="ms-in">'+
-      '<div class="ms-head"><div class="ms-school">Taldangra Fulmati High School [H.S.]</div><div class="ms-addr">Taldangra, Bankura, West Bengal</div>'+
+      '<div class="ms-head"><div class="ms-school">'+esc(SCH().name)+'</div>'+schoolLines(o)+
       '<div class="ms-title">'+esc(o.title)+'</div>'+(o.subtitle?'<div class="ms-sub">'+esc(o.subtitle)+'</div>':'')+'</div>'+
       '<table class="ms-id">'+idRows+'</table>'+
       '<table class="ms-tb"><thead>'+head+'</thead><tbody>'+body+'</tbody></table>'+
       sum+(o.provisional?'<div class="ms-prov">PROVISIONAL &mdash; marks of some subjects are not yet finalised by the school.</div>':'')+notes+
       '<div class="ms-sign"><div>Class Teacher</div><div>Head of the Institution<br>(with seal)</div></div>'+
-      '<div class="ms-foot">Computer-generated statement of marks &bull; Date of issue: '+today+' &bull; Not valid without the signature and seal of the Head of the Institution.</div>'+
+      '<div class="ms-foot">Computer-generated statement of marks &bull; '+(SCH().place?'Place: '+esc(SCH().place)+' &bull; ':'')+'Date of issue: '+today+' &bull; Not valid without the signature and seal of the Head of the Institution.</div>'+
       '</div></div>';
   }
   /* Print ONLY the marksheet. New tab first; hidden iframe if the browser blocks pop-ups. */
@@ -4454,6 +4653,7 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
     }
     if(!cfgDone){
       try{ const c=await db.collection('students').doc('xiConfig').get();
+        if(c.exists&&c.data().school) Object.assign(window.TFHS_SCHOOL,c.data().school);
         if(c.exists&&c.data().schemes){ SCHEMES=c.data().schemes; EXAM_SCHEDULE=c.data().schedule||{}; refreshSubjectLists(); } }catch(e){}
       cfgDone=true;
     }
@@ -4506,7 +4706,7 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
       const fullReady=s1&&s2;
 
       /* ---- which stage to show ---- */
-      let pub={}, ranksAll={}; try{ const pc=await db.collection('students').doc('xiConfig').get(); pub=(pc.exists&&pc.data().publish)||{}; ranksAll=(pc.exists&&pc.data().ranks)||{}; }catch(e){ pub={}; ranksAll={}; }
+      let pub={}, ranksAll={}; try{ const pc=await db.collection('students').doc('xiConfig').get(); pub=(pc.exists&&pc.data().publish)||{}; ranksAll=(pc.exists&&pc.data().ranks)||{}; if(pc.exists&&pc.data().school) Object.assign(window.TFHS_SCHOOL,pc.data().school); }catch(e){ pub={}; ranksAll={}; }
       const okSem1=!!pub.sem1, okSupp=!!pub.supp&&sp, okFull=!!pub.full&&fullReady;
       if(!okSem1&&!okSupp&&!okFull){ msg(pub.note||'Result is not published yet. Please wait for the school\'s announcement.'); return; }
       let want=$('rvExam').value; if(!['SEM1','SEM1S','COMB'].includes(want)) want='AUTO';
@@ -4587,7 +4787,7 @@ window.MP={getStudents:()=>students,loadDashAtt,loadAttSummary,showView,importEx
       if(mode==='COMB'&&overall==='FAIL') notes.push('As per Regulation 8, a candidate who could not clear any subject may appear in the Supplementary Examination as notified by the school/Council.');
       notes.push('AB = Absent. Only finalised (locked) marks are shown. For official results refer to the school.');
       const html=MS.build({
-        title:'Class XI — '+label,
+        title:'Class XI — '+label, subtitle:(window.TFHS_SCHOOL&&TFHS_SCHOOL.session?'Session: '+TFHS_SCHOOL.session:''),
         who:[['Name of Candidate',String(getStudentName(st)||'')],['Registration No.',String(getStudentReg(st)||'')],['Roll No.',String(getStudentRoll(st)||'')],['Section',(typeof xmSecLabel==='function'?xmSecLabel(st):'')],['Banglar Siksha ID',getBs(st)],['Sex',String(getStudentSex(st)||'')],['Date of Birth',getDob(st)],["Father's Name",father],['Medium',medium]],
         head:mode==='COMB'?['Sem I Th.','Sem II Th.','Pr. / Pj.','Total','F.M.']:['Full Marks','Pass Marks','Marks Obtained'],
         rows,summary,notes,provisional:anyP
@@ -5289,12 +5489,12 @@ function parseListPages(pages){
       '.badge{font-weight:700}.badge.fail{color:#b42318}.badge.pass{color:#146c2e}.badge.absent{color:#92400e}'+
       '.sg{display:flex;justify-content:space-between;margin-top:11mm;font-size:9px}.sg div{border-top:1px solid #000;padding-top:2px;min-width:60mm;text-align:center}'+
       '.pf{display:flex;justify-content:space-between;font-size:8px;color:#333;border-top:.6px solid #777;margin-top:3px;padding-top:2px}';
-    const html=pages.map((p,i)=>'<div class="pg"><div class="ph"><div class="sn">TALDANGRA FULMATI HIGH SCHOOL [H.S.]</div><div class="pt">'+esc(cfg.title)+'</div>'+
+    const html=pages.map((p,i)=>'<div class="pg"><div class="ph"><div class="sn">'+esc(String(TFHS_SCHOOL.name).toUpperCase())+'</div><div class="ps">'+esc(schoolSubText(true))+'</div><div class="pt">'+esc(cfg.title)+'</div>'+
       (cfg.sub?'<div class="ps">'+esc(cfg.sub)+'</div>':'')+(p.g.heading?'<div class="gh">'+esc(p.g.heading)+(p.first?'':' (contd.)')+'</div>':'')+
       (cfg.provisional?'<div class="prov">'+esc(cfg.provisional)+'</div>':'')+'</div>'+
       '<table class="tb"><thead>'+p.g.thead+'</thead><tbody>'+p.rows.join('')+'</tbody></table>'+
       (p.last?'<div class="sg"><div>Prepared by</div><div>Checked by</div><div>Head of the Institution</div></div>':'')+
-      '<div class="pf"><span>Taldangra Fulmati High School [H.S.] — Office record • Printed on '+today()+'</span><span>Page '+(i+1)+' of '+n+'</span></div></div>').join('');
+      '<div class="pf"><span>'+esc(TFHS_SCHOOL.name)+' — Office record • Printed on '+today()+'</span><span>Page '+(i+1)+' of '+n+'</span></div></div>').join('');
     window.TFHS_MS.print(html,cfg.title,{css:css});
   }
   const fromTable=t=>({thead:[...t.tHead.rows].map(r=>r.outerHTML).join(''),rows:[...t.tBodies[0].rows].map(r=>r.outerHTML),cols:[...t.tHead.rows[0].cells].reduce((s,c)=>s+(c.colSpan||1),0),hrows:t.tHead.rows.length});
