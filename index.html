@@ -858,6 +858,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
       <div class="field"><label>PIN</label><input id="sc_pin" style="width:110px" maxlength="6"></div>
     </div>
     <div class="toolbar" style="align-items:flex-end">
+      <div class="field"><label>School Index No.</label><input id="sc_index" style="width:120px" placeholder="U1-083"></div>
       <div class="field"><label>H.S. Code</label><input id="sc_hs" style="width:120px"></div>
       <div class="field"><label>UDISE</label><input id="sc_udise" style="width:170px"></div>
       <div class="field"><label>Session</label><input id="sc_session" style="width:110px"></div>
@@ -1217,11 +1218,11 @@ let combinedRows = [];
 let importedHeaders = [];
 
 /* SCHOOL DETAILS (editable by Admin, stored in students/xiConfig.school) */
-window.TFHS_SCHOOL={name:"Taldangra Fulmati High School [H.S.]",addr:"Taldangra, Bankura, West Bengal",pin:"",phone:"",email:"",hsCode:"114071",udise:"19132104401",affil:"Affiliated to the West Bengal Council of Higher Secondary Education",session:"2026-27",place:"Taldangra"};
+window.TFHS_SCHOOL={name:"Taldangra Fulmati High School [H.S.]",addr:"Taldangra, Bankura, West Bengal",pin:"",phone:"",email:"",hsCode:"114071",udise:"19132104401",indexNo:"U1-083",affil:"Affiliated to the West Bengal Council of Higher Secondary Education",session:"2026-27",place:"Taldangra"};
 function schoolSubLines(forHS){
   const S=window.TFHS_SCHOOL, l=[];
   const a=[S.addr,S.pin?"PIN - "+S.pin:""].filter(Boolean).join(", "); if(a) l.push(a);
-  const c=[forHS&&S.hsCode?"H.S. Code: "+S.hsCode:"",S.udise?"UDISE: "+S.udise:""].filter(Boolean).join("  |  "); if(c) l.push(c);
+  const c=[S.indexNo?"School Index No.: "+S.indexNo:"",forHS&&S.hsCode?"H.S. Code: "+S.hsCode:"",S.udise?"UDISE: "+S.udise:""].filter(Boolean).join("  |  "); if(c) l.push(c);
   if(forHS&&S.affil) l.push(S.affil);
   const k=[S.phone?"Phone: "+S.phone:"",S.email?"Email: "+S.email:""].filter(Boolean).join("  |  "); if(k) l.push(k);
   return l;
@@ -3243,7 +3244,7 @@ async function xmSave(){
 }
 
 /* ===== SCHOOL DETAILS (Admin) ===== */
-const SC_FIELDS={sc_name:"name",sc_addr:"addr",sc_pin:"pin",sc_hs:"hsCode",sc_udise:"udise",sc_session:"session",sc_place:"place",sc_phone:"phone",sc_email:"email",sc_affil:"affil"};
+const SC_FIELDS={sc_name:"name",sc_addr:"addr",sc_pin:"pin",sc_hs:"hsCode",sc_index:"indexNo",sc_udise:"udise",sc_session:"session",sc_place:"place",sc_phone:"phone",sc_email:"email",sc_affil:"affil"};
 function scFill(){ Object.keys(SC_FIELDS).forEach(id=>{ const e=document.getElementById(id); if(e) e.value=TFHS_SCHOOL[SC_FIELDS[id]]||""; }); }
 async function scSave(){
   if(!isAdmin()){ alert("Only Admin can change school details."); return; }
@@ -4595,7 +4596,7 @@ window.MP={getStudents:()=>students,bulkGenerate,bulkPreview,bulkPrintAll,loadDa
   function schoolLines(o){
     const S=SCH(), hs=/^Class XI\b/i.test(o.title||''), l=[];
     const a=[S.addr,S.pin?'PIN - '+S.pin:''].filter(Boolean).join(', '); if(a) l.push(a);
-    const c=[hs&&S.hsCode?'H.S. Code: '+S.hsCode:'',S.udise?'UDISE: '+S.udise:''].filter(Boolean).join(' | '); if(c) l.push(c);
+    const c=[S.indexNo?'School Index No.: '+S.indexNo:'',hs&&S.hsCode?'H.S. Code: '+S.hsCode:'',S.udise?'UDISE: '+S.udise:''].filter(Boolean).join(' | '); if(c) l.push(c);
     if(hs&&S.affil) l.push(S.affil);
     const k=[S.phone?'Phone: '+S.phone:'',S.email?'Email: '+S.email:''].filter(Boolean).join(' | '); if(k) l.push(k);
     return l.map(x=>'<div class="ms-addr">'+esc(x)+'</div>').join('');
