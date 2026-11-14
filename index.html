@@ -738,7 +738,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
       <div class="field"><label>Sex</label>
         <select id="xtSex" onchange="renderXiTab()"><option value="ALL">All</option><option value="Male">Male</option><option value="Female">Female</option></select></div>
       <div class="field"><label>Order</label>
-        <select id="xtSort" onchange="renderXiTab()"><option value="rank">Rank-wise</option><option value="roll">Roll / Reg-wise</option></select></div>
+        <select id="xtSort" onchange="renderXiTab()"><option value="rank">Rank-wise (overall)</option><option value="mrank">Medium-wise Rank (Bengali, then Santali)</option><option value="roll">Roll-wise</option><option value="reg">Registration No.-wise</option><option value="mroll">Medium-wise Roll (Bengali, then Santali)</option></select></div>
       <div class="field"><label>Columns</label>
         <select id="xtDetail" onchange="renderXiTab()"><option value="total">Subject Total only</option><option value="full">Component-wise</option></select></div>
       <div class="field" style="flex:1;min-width:200px"><label>Registration No. / Name</label><input id="xtSearch" placeholder="Registration No. / Name" oninput="renderXiTab()"></div>
@@ -754,7 +754,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
 <!-- XI RESULT SHEET (Reg-wise / Sex-wise / Subject-group-wise) -->
 <section id="xires" class="view">
   <div class="title">Class XI — Result Sheet</div>
-  <div class="subtitle">Registration No. low → high · Sex-wise · Subject-group-wise (same elective combination). Uses locked marks sheets only.</div>
+  <div class="subtitle">Order by Registration No., Roll No. or Rank · Medium-wise (Bengali / Santali) · Sex-wise · Subject-group-wise. Works for Semester I, Sem I + Supplementary, Semester II and Combined. Uses locked marks sheets only.</div>
   <div class="panel">
     <div class="toolbar">
       <div class="field"><label>Result of</label>
@@ -774,6 +774,12 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
         <select id="xrSplit" onchange="xrRender()"><option value="sep">Separate (Boys, then Girls)</option><option value="mix">Together</option></select></div>
       <div class="field"><label>Medium</label>
         <select id="xrMedium" onchange="xrRender()"><option value="ALL">All Mediums</option><option value="BENGALI">Bengali</option><option value="SANTALI">Santali</option></select></div>
+      <div class="field"><label>Order</label>
+        <select id="xrOrder" onchange="xrRender()"><option value="reg">Registration No. (low → high)</option><option value="roll">Roll No.</option><option value="rank">Rank-wise</option></select></div>
+      <div class="field"><label>Medium sections</label>
+        <select id="xrMedSplit" onchange="xrRender()"><option value="sep">Separate (Bengali, then Santali)</option><option value="mix">Together</option></select></div>
+      <div class="field"><label>Rank</label>
+        <select id="xrRankBy" onchange="xrRender()"><option value="all">Overall rank (whole class)</option><option value="med">Medium-wise rank</option></select></div>
       <div class="field"><label>Columns</label>
         <select id="xrDetail" onchange="xrRender()"><option value="total">Subject Total only</option><option value="full">Component-wise</option></select></div>
       <div class="field" style="flex:1;min-width:200px"><label>Registration No. / Name</label><input id="xrSearch" placeholder="Registration No. / Name" oninput="xrRender()"></div>
@@ -1131,13 +1137,15 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
     <div class="toolbar">
       <div class="field"><label>Subject</label><select id="mp_resultSubject" onchange="MP.generateResult()"></select></div>
       <div class="field"><label>Sex</label><select id="mp_resultSex" onchange="MP.renderResult()"><option>ALL</option><option>Male</option><option>Female</option></select></div>
+      <div class="field"><label>Medium</label><select id="mp_resultMedium" onchange="MP.renderResult()"><option value="ALL">All Mediums</option><option value="BNGA">Bengali Medium</option><option value="SANT">Santali Medium</option></select></div>
+      <div class="field"><label>Order</label><select id="mp_resultOrder" onchange="MP.renderResult()"><option value="roll">Section / Roll-wise</option><option value="rank">Rank-wise (this subject)</option><option value="mroll">Medium-wise Roll (Bengali, then Santali)</option><option value="mrank">Medium-wise Rank (Bengali, then Santali)</option></select></div>
       <div class="field" style="flex:1"><label>Search</label><input id="mp_resultSearch" placeholder="B.S. Portal ID / Roll / Name" oninput="MP.renderResult()"></div>
       <button class="btn" onclick="MP.generateResult()">Generate</button>
       <button class="btn secondary" onclick="MP.printResult()">Print Result</button>
     </div>
     <div id="mp_resultLockBox" class="lockbox">Select a subject.</div>
   </div>
-  <div class="panel"><div class="tablewrap"><table><thead><tr><th>SL</th><th>B.S. Portal ID</th><th>Class</th><th>Sec</th><th>Roll</th><th>Name</th><th>Sex</th><th>Written</th><th>IFE</th><th>Total</th><th>Result</th></tr></thead><tbody id="mp_resultBody"></tbody></table></div></div>
+  <div class="panel"><div class="tablewrap"><table><thead><tr><th>SL</th><th>Rank</th><th>B.S. Portal ID</th><th>Class</th><th>Sec</th><th>Roll</th><th>Name</th><th>Sex</th><th>Medium</th><th>Written</th><th>IFE</th><th>Total</th><th>Result</th></tr></thead><tbody id="mp_resultBody"></tbody></table></div></div>
 </section>
 
 <section id="mp_attsummary" class="view">
@@ -1163,7 +1171,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
       <div class="field"><label>Medium</label><select id="mp_tabMedium" onchange="MP.renderTabulation()"><option value="ALL">All Mediums</option><option value="BNGA">Bengali Medium</option><option value="SANT">Santali Medium (SANT)</option></select></div>
       <div class="field"><label>Section</label><select id="mp_tabSec" onchange="MP.renderTabulation()"><option>ALL</option></select></div>
       <div class="field"><label>Sex</label><select id="mp_tabSex" onchange="MP.renderTabulation()"><option>ALL</option><option>Male</option><option>Female</option></select></div>
-      <div class="field"><label>Order</label><select id="mp_tabSort" onchange="MP.renderTabulation()"><option value="rank">Rank-wise</option><option value="roll">Section / Roll-wise</option></select></div>
+      <div class="field"><label>Order</label><select id="mp_tabSort" onchange="MP.renderTabulation()"><option value="rank">Rank-wise (overall)</option><option value="mrank">Medium-wise Rank (Bengali, then Santali)</option><option value="roll">Section / Roll-wise</option><option value="mroll">Medium-wise Roll (Bengali, then Santali)</option></select></div>
       <div class="field"><label>Columns</label><select id="mp_tabDetail" onchange="MP.renderTabulation()"><option value="total">Subject Total only</option><option value="full">Written + IFE + Total</option></select></div>
       <div class="field" style="flex:1"><label>Search</label><input id="mp_tabSearch" placeholder="B.S. Portal ID / Roll / Name" oninput="MP.renderTabulation()"></div>
       <button class="btn" onclick="MP.generateTabulation()">Generate</button>
@@ -2923,6 +2931,8 @@ function xtSubLabels(){
     return m==="SEM1"?["Th"]:m==="SEM2"?["Th",cl,"Tot"]:["S1",("S2"),cl,"Tot"];
   });
 }
+function xtRk(r){return document.getElementById("xtSort").value==="mrank"?(r.medRank||r.rank):r.rank}
+function xtSortLabel(){const v=document.getElementById("xtSort").value;return {rank:"Rank-wise",mrank:"Medium-wise Rank",roll:"Roll-wise",reg:"Registration No.-wise",mroll:"Medium-wise Roll"}[v]||"Roll-wise"}
 function xtFiltered(){
   const q=(document.getElementById("xtSearch").value||"").toLowerCase().trim(),
         sx=document.getElementById("xtSex").value, so=document.getElementById("xtSort").value,
@@ -2934,8 +2944,15 @@ function xtFiltered(){
       (!q||String(getStudentReg(s)||"").toLowerCase().includes(q)||String(getStudentName(s)||"").toLowerCase().includes(q));
   });
   const rn=s=>Number(getStudentRoll(s))||0;
-  rows.sort(so==="rank"?(a,b)=>a.rank-b.rank||rn(a.student)-rn(b.student)
-                       :(a,b)=>rn(a.student)-rn(b.student)||String(getStudentReg(a.student)).localeCompare(String(getStudentReg(b.student))));
+  const mo=r=>studentTakesSubject(r.student,"SANT")?1:0;
+  const rg=(a,b)=>xrCmp(getStudentReg(a.student),getStudentReg(b.student));
+  const rl=(a,b)=>rn(a.student)-rn(b.student)||rg(a,b);
+  if(so==="mrank"||so==="mroll") xrMedRanks();
+  rows.sort(so==="rank"?(a,b)=>a.rank-b.rank||rl(a,b)
+           :so==="mrank"?(a,b)=>mo(a)-mo(b)||a.medRank-b.medRank||rl(a,b)
+           :so==="mroll"?(a,b)=>mo(a)-mo(b)||rl(a,b)
+           :so==="reg"?(a,b)=>rg(a,b)||rl(a,b)
+           :rl);
   return rows;
 }
 function renderXiTab(){
@@ -2970,13 +2987,13 @@ function renderXiTab(){
       return parts.map((v,k)=>`<td${k===parts.length-1?bad:""}>${v}</td>`).join("");
     }).join("");
     const cls=r.result==="PASS"?"pass":(r.result==="INCOMPLETE"?"absent":"fail");
-    return `<tr><td>${i+1}</td><td><b>${r.rank}</b></td><td>${escapeHtml(getStudentReg(s))}</td><td style="text-align:left;white-space:nowrap">${escapeHtml(getStudentName(s))}</td><td>${escapeHtml(getStudentSex(s))}</td>${cells}<td><b>${r.total}</b></td><td>${r.fm}</td><td>${r.pct.toFixed(2)}</td><td><span class="badge ${cls}">${r.result}</span></td></tr>`;
+    return `<tr><td>${i+1}</td><td><b>${xtRk(r)}</b></td><td>${escapeHtml(getStudentReg(s))}</td><td style="text-align:left;white-space:nowrap">${escapeHtml(getStudentName(s))}</td><td>${escapeHtml(getStudentSex(s))}</td>${cells}<td><b>${r.total}</b></td><td>${r.fm}</td><td>${r.pct.toFixed(2)}</td><td><span class="badge ${cls}">${r.result}</span></td></tr>`;
   }).join(""):"<tr><td colspan='30'>No students match the filter.</td></tr>";
 }
 function printXiTab(){
   if(!xtRows.length){ alert("Generate the tabulation sheet first."); return; }
   const t=document.getElementById("xtTable").cloneNode(true);
-  const so=document.getElementById("xtSort").value==="rank"?"Rank-wise":"Roll-wise";
+  const so=xtSortLabel();
   const sx=document.getElementById("xtSex").value;
   const med=(document.getElementById("xtMedium")||{}).value||"ALL";
   const note=xtPending.length?`<p style="text-align:center;color:#b91c1c;font-size:11px">PROVISIONAL — pending: ${[...new Set(xtPending)].map(escapeHtml).join(", ")}</p>`:"";
@@ -2993,7 +3010,7 @@ function exportXiTab(){
   hdr.push("Grand Total","Full Marks","%","Result");
   const aoa=[hdr];
   rows.forEach((r,i)=>{
-    const s=r.student, line=[i+1,r.rank,getStudentReg(s),getStudentName(s),getStudentSex(s),studentTakesSubject(s,"SANT")?"Santali":"Bengali"];
+    const s=r.student, line=[i+1,xtRk(r),getStudentReg(s),getStudentName(s),getStudentSex(s),studentTakesSubject(s,"SANT")?"Santali":"Bengali"];
     r.cells.forEach((c,ci)=>{
       const n=xtModeUsed==="SEM1"?1:xtModeUsed==="SEM2"?3:4;
       if(c.state==="M") line.push(...(xtModeUsed==="SEM1"?[c.t]:[...c.parts,c.t]));
@@ -3033,21 +3050,43 @@ function xrFillGroups(){
   sel.innerHTML='<option value="*">All groups</option>'+keys.map(k=>`<option value="${escapeHtml(k)}">${escapeHtml(xrGName(k))} (${cnt.get(k)})</option>`).join("");
   if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
 }
+function xrMed(st){return studentTakesSubject(st,"SANT")?"SANTALI":"BENGALI"}
+function xrMedTitle(m){return m==="SANTALI"?"SANTALI MEDIUM":m==="BENGALI"?"BENGALI MEDIUM":""}
+function xrMedRanks(){
+  const by={BENGALI:[],SANTALI:[]};
+  xtRows.forEach(r=>by[xrMed(r.student)].push(r));
+  Object.keys(by).forEach(k=>{const l=by[k].slice().sort((a,b)=>b.total-a.total); l.forEach((r,i)=>{r.medRank=(i>0&&r.total===l[i-1].total)?l[i-1].medRank:i+1;});});
+}
+function xrRk(r){return document.getElementById("xrRankBy").value==="med"?(r.medRank||r.rank):r.rank}
+function xrSecTitle(sec){return sec.gtitle+(sec.med&&sec.med!=="ALL"?" — "+xrMedTitle(sec.med):"")+(sec.sex!=="ALL"?" — "+xrSexTitle(sec.sex):"")}
+function xrOrderLabel(){
+  const o=document.getElementById("xrOrder").value, rb=document.getElementById("xrRankBy").value==="med"?"Medium-wise rank":"Overall rank";
+  return o==="rank"?"Rank-wise ("+rb+")":o==="roll"?"Roll No. (low to high)":"Registration No. (low to high)";
+}
 function xrSections(){
   const g=id=>document.getElementById(id).value;
-  const q=(g("xrSearch")||"").toLowerCase().trim(), sx=g("xrSex"), med=g("xrMedium"), grp=g("xrGroup"), by=g("xrBy"), split=g("xrSplit");
+  xrMedRanks();
+  const q=(g("xrSearch")||"").toLowerCase().trim(), sx=g("xrSex"), med=g("xrMedium"), grp=g("xrGroup"), by=g("xrBy"), split=g("xrSplit"), msplit=g("xrMedSplit"), ord=g("xrOrder");
   const rows=xtRows.filter(r=>{const s=r.student;
-    return (med==="ALL"||(studentTakesSubject(s,"SANT")?"SANTALI":"BENGALI")===med)&&(sx==="ALL"||xrSexOf(s)===sx)&&(grp==="*"||xrGKey(s)===grp)&&
+    return (med==="ALL"||xrMed(s)===med)&&(sx==="ALL"||xrSexOf(s)===sx)&&(grp==="*"||xrGKey(s)===grp)&&
       (!q||String(getStudentReg(s)||"").toLowerCase().includes(q)||String(getStudentName(s)||"").toLowerCase().includes(q));});
-  const gm=new Map();
-  rows.forEach(r=>{const k=by==="grp"?xrGKey(r.student):"__ALL__"; if(!gm.has(k))gm.set(k,[]); gm.get(k).push(r)});
-  const keys=[...gm.keys()].sort((a,b)=>xrGName(a).localeCompare(xrGName(b)));
   const byReg=(a,b)=>xrCmp(getStudentReg(a.student),getStudentReg(b.student))||xrCmp(getStudentRoll(a.student),getStudentRoll(b.student));
+  const byRoll=(a,b)=>xrCmp(getStudentRoll(a.student),getStudentRoll(b.student))||xrCmp(getStudentReg(a.student),getStudentReg(b.student));
+  const byRank=(a,b)=>xrRk(a)-xrRk(b)||byReg(a,b);
+  const cmp=ord==="rank"?byRank:ord==="roll"?byRoll:byReg;
+  const mediums=msplit==="sep"?["BENGALI","SANTALI"]:["ALL"];
   const secs=[];
-  keys.forEach(k=>{
-    const list=gm.get(k);
-    const parts=split==="sep"?["Male","Female","Other"].map(x=>[x,list.filter(r=>xrSexOf(r.student)===x)]).filter(p=>p[1].length):[["ALL",list]];
-    parts.forEach(([x,l])=>secs.push({gtitle:xrGName(k),sex:x,rows:l.slice().sort(byReg)}));
+  mediums.forEach(m=>{
+    const mrows=m==="ALL"?rows:rows.filter(r=>xrMed(r.student)===m);
+    if(!mrows.length) return;
+    const gm=new Map();
+    mrows.forEach(r=>{const k=by==="grp"?xrGKey(r.student):"__ALL__"; if(!gm.has(k))gm.set(k,[]); gm.get(k).push(r)});
+    const keys=[...gm.keys()].sort((a,b)=>xrGName(a).localeCompare(xrGName(b)));
+    keys.forEach(k=>{
+      const list=gm.get(k);
+      const parts=split==="sep"?["Male","Female","Other"].map(x=>[x,list.filter(r=>xrSexOf(r.student)===x)]).filter(p=>p[1].length):[["ALL",list]];
+      parts.forEach(([x,l])=>secs.push({gtitle:xrGName(k),med:m,sex:x,rows:l.slice().sort(cmp)}));
+    });
   });
   return secs;
 }
@@ -3060,7 +3099,7 @@ function xrTable(sec,detail){
   const idx=xtCols.map((c,i)=>i).filter(i=>sec.rows.some(r=>r.cells[i].state!=="N"));
   const hasRoll=students.some(s=>String(getStudentRoll(s))!==String(getStudentReg(s)));
   const base=["SL","Registration No."].concat(hasRoll?["Roll"]:[],["Name","Sex"]);
-  const tail=[xtModeUsed==="COMB"?"Grand Total (Best 5)":"Grand Total","Full Marks","%","Result","Rank"];
+  const tail=[xtModeUsed==="COMB"?"Grand Total (Best 5)":"Grand Total","Full Marks","%","Result",document.getElementById("xrRankBy").value==="med"?"Rank (Medium)":"Rank"];
   let head;
   if(full){
     head="<tr>"+base.map(h=>`<th rowspan="2">${h}</th>`).join("")+idx.map(i=>`<th colspan="${labels[i].length}">${escapeHtml(xtCols[i])}</th>`).join("")+tail.map(h=>`<th rowspan="2">${h}</th>`).join("")+"</tr><tr>"+idx.map(i=>labels[i].map(x=>`<th>${x}</th>`).join("")).join("")+"</tr>";
@@ -3082,7 +3121,7 @@ function xrTable(sec,detail){
       return parts.map((v,k)=>`<td${k===parts.length-1?bad:""}>${v}</td>`).join("");
     }).join("");
     const cls=r.result==="PASS"?"pass":(r.result==="INCOMPLETE"?"absent":"fail");
-    return `<tr><td>${n+1}</td><td>${escapeHtml(getStudentReg(s))}</td>${hasRoll?`<td>${escapeHtml(getStudentRoll(s))}</td>`:""}<td style="text-align:left;white-space:nowrap">${escapeHtml(getStudentName(s))}</td><td>${escapeHtml(getStudentSex(s))}</td>${cells}<td><b>${r.total}</b></td><td>${r.fm}</td><td>${r.pct.toFixed(2)}</td><td><span class="badge ${cls}">${r.result}</span></td><td>${r.rank}</td></tr>`;
+    return `<tr><td>${n+1}</td><td>${escapeHtml(getStudentReg(s))}</td>${hasRoll?`<td>${escapeHtml(getStudentRoll(s))}</td>`:""}<td style="text-align:left;white-space:nowrap">${escapeHtml(getStudentName(s))}</td><td>${escapeHtml(getStudentSex(s))}</td>${cells}<td><b>${r.total}</b></td><td>${r.fm}</td><td>${r.pct.toFixed(2)}</td><td><span class="badge ${cls}">${r.result}</span></td><td>${xrRk(r)}</td></tr>`;
   }).join("");
   return {head,body,ncols};
 }
@@ -3091,19 +3130,19 @@ function xrRender(){
   if(!xtRows.length||xtModeUsed!==(xrModeSel==="SEM1S"?"SEM1":xrModeSel)){ out.innerHTML='<div class="panel"><div class="rv-note">Click Generate.</div></div>'; return; }
   const secs=xrSections(), det=document.getElementById("xrDetail").value==="full";
   out.innerHTML=secs.length?secs.map(sec=>{const t=xrTable(sec,det);
-    return `<div class="panel"><h3 style="margin:0 0 4px">${escapeHtml(sec.gtitle)}${sec.sex!=="ALL"?" — "+xrSexTitle(sec.sex):""}</h3><div class="rv-note">${xrSummary(sec)}</div><div class="tablewrap"><table><thead>${t.head}</thead><tbody>${t.body}</tbody></table></div></div>`;
+    return `<div class="panel"><h3 style="margin:0 0 4px">${escapeHtml(xrSecTitle(sec))}</h3><div class="rv-note">${xrSummary(sec)}</div><div class="tablewrap"><table><thead>${t.head}</thead><tbody>${t.body}</tbody></table></div></div>`;
   }).join(""):'<div class="panel"><div class="rv-note">No students match the filter.</div></div>';
 }
 function xrPrint(){
   if(!xtRows.length){ alert("Generate the result sheet first."); return; }
   const secs=xrSections(); if(!secs.length){ alert("No students match the filter."); return; }
   const det=document.getElementById("xrDetail").value==="full", newPage=document.getElementById("xrNewPage").checked;
-  const med=document.getElementById("xrMedium").value, order="Registration No. (low to high)";
+  const med=document.getElementById("xrMedium").value, order=xrOrderLabel();
   const note=xtPending.length?`<div style="color:#b91c1c;font-size:10px;margin-top:3px">PROVISIONAL — marks not locked for: ${[...new Set(xtPending)].map(escapeHtml).join(", ")}</div>`:"";
   const tables=secs.map((sec,i)=>{
     const t=xrTable(sec,det);
     const hdr=`${schoolHdrHtml(true)}<div class="exam">CLASS XI — ${XR_LABEL[xrModeSel]} — RESULT SHEET</div>`+
-      `<div class="grp">SUBJECT GROUP: ${escapeHtml(sec.gtitle)}${sec.sex!=="ALL"?" &nbsp;|&nbsp; "+xrSexTitle(sec.sex):""}</div>`+
+      `<div class="grp">SUBJECT GROUP: ${escapeHtml(sec.gtitle)}${sec.med&&sec.med!=="ALL"?" &nbsp;|&nbsp; "+xrMedTitle(sec.med):""}${sec.sex!=="ALL"?" &nbsp;|&nbsp; "+xrSexTitle(sec.sex):""}</div>`+
       `<div class="meta">Order: ${order}${med!=="ALL"?" | Medium: "+escapeHtml(med):""} | ${xrSummary(sec).replace(/<\/?b>/g,"")}</div>`+
       `<div class="meta">AB = Absent, — = marks not available, · = subject not taken${xtModeUsed==="COMB"?", grey italic = 6th subject (not counted)":""}</div>`+note;
     return `<table class="${newPage&&i?"pb":(i?"gap":"")}"><thead><tr><td class="dh" colspan="${t.ncols}">${hdr}</td></tr>${t.head}</thead><tbody>${t.body}</tbody><tfoot><tr><td class="df" colspan="${t.ncols}"><div class="sig"><span>Prepared by</span><span>Checked by</span><span>Headmaster</span></div>${schoolFootHtml()}</td></tr></tfoot></table>`;
@@ -3878,14 +3917,25 @@ async function generateResult(){
   renderResult();
 }
 function renderResult(){
-  const q=normalize(document.getElementById("mp_resultSearch").value).toLowerCase(),sx=document.getElementById("mp_resultSex").value;
-  const rows=resultRows.filter(r=>{const g=normalize(sex(r.student)).toLowerCase();return (sx==="ALL"||g===sx.toLowerCase())&&(!q||keyOf(r.student).toLowerCase().includes(q)||nameOf(r.student).toLowerCase().includes(q))});
-  document.getElementById("mp_resultBody").innerHTML=rows.map(r=>{
+  const gv=id=>{const e=document.getElementById(id);return e?e.value:""};
+  const q=normalize(gv("mp_resultSearch")).toLowerCase(),sx=gv("mp_resultSex")||"ALL",md=gv("mp_resultMedium")||"ALL",ord=gv("mp_resultOrder")||"roll";
+  const medOf=r=>firstLang(r.student)==="SANT"?"SANT":"BNGA", mo=r=>medOf(r)==="SANT"?1:0;
+  const rk=new Map();
+  const rankSet=list=>{const t=list.filter(r=>!r.absent&&r.total!=="").sort((a,b)=>Number(b.total)-Number(a.total));t.forEach((r,i)=>rk.set(r,(i>0&&Number(r.total)===Number(t[i-1].total))?rk.get(t[i-1]):i+1))};
+  if(ord==="mroll"||ord==="mrank"){rankSet(resultRows.filter(r=>medOf(r)==="BNGA"));rankSet(resultRows.filter(r=>medOf(r)==="SANT"))}else rankSet(resultRows);
+  const rows=resultRows.filter(r=>{const g=normalize(sex(r.student)).toLowerCase();return (sx==="ALL"||g===sx.toLowerCase())&&(md==="ALL"||medOf(r)===md)&&(!q||keyOf(r.student).toLowerCase().includes(q)||nameOf(r.student).toLowerCase().includes(q))});
+  const rn=r=>Number(roll(r.student))||0, sc=r=>String(sec(r.student)), RK=r=>rk.has(r)?rk.get(r):1e9;
+  const byRoll=(a,b)=>sc(a).localeCompare(sc(b))||rn(a)-rn(b);
+  rows.sort(ord==="rank"?(a,b)=>RK(a)-RK(b)||byRoll(a,b):ord==="mrank"?(a,b)=>mo(a)-mo(b)||RK(a)-RK(b)||byRoll(a,b):ord==="mroll"?(a,b)=>mo(a)-mo(b)||byRoll(a,b):byRoll);
+  document.getElementById("mp_resultBody").innerHTML=rows.map((r,i)=>{
     const result=r.absent?"ABSENT":(Number(r.total)>=PASS_MARK?"PASS":"FAIL");
-    return `<tr><td>${r.sl}</td><td>${escapeHtml(reg(r.student))}</td><td>${escapeHtml(cls(r.student))}</td><td>${escapeHtml(sec(r.student))}</td><td>${escapeHtml(roll(r.student))}</td><td>${escapeHtml(nameOf(r.student))}</td><td>${escapeHtml(sex(r.student))}</td><td>${r.absent?"—":r.written}</td><td>${r.absent?"—":r.ife}</td><td>${r.absent?"—":r.total}</td><td><span class="badge ${result==="PASS"?"pass":"fail"}">${result}</span></td></tr>`;
-  }).join("")||"<tr><td colspan='11'>Generate the result after the marks sheet is locked.</td></tr>";
+    return `<tr><td>${i+1}</td><td><b>${rk.has(r)?rk.get(r):"—"}</b></td><td>${escapeHtml(reg(r.student))}</td><td>${escapeHtml(cls(r.student))}</td><td>${escapeHtml(sec(r.student))}</td><td>${escapeHtml(roll(r.student))}</td><td style="text-align:left">${escapeHtml(nameOf(r.student))}</td><td>${escapeHtml(sex(r.student))}</td><td>${medOf(r)==="SANT"?"Santali":"Bengali"}</td><td>${r.absent?"—":r.written}</td><td>${r.absent?"—":r.ife}</td><td>${r.absent?"—":r.total}</td><td><span class="badge ${result==="PASS"?"pass":"fail"}">${result}</span></td></tr>`;
+  }).join("")||"<tr><td colspan='13'>Generate the result after the marks sheet is locked.</td></tr>";
 }
-function printResult(){printTable("mp_resultBody","MP (SE) 2027 — Result")}
+function printResult(){
+  const t=e=>{const x=document.getElementById(e);return x&&x.selectedIndex>=0?x.options[x.selectedIndex].text:""};
+  printTable("mp_resultBody","MP (SE) 2027 — Result — "+escapeHtml(t("mp_resultSubject"))+" — "+escapeHtml(t("mp_resultOrder"))+(t("mp_resultMedium")!=="All Mediums"?" — "+escapeHtml(t("mp_resultMedium")):""));
+}
 function printAttendance(){printTable("mp_attendanceBody","MP (SE) 2027 — Attendance")}
 function printMarks(){printTable("mp_marksBody","MP (SE) 2027 — Marks Entry")}
 function printStudents(){printTable("mp_studentBody","MP (SE) 2027 — Student List")}
@@ -3972,6 +4022,13 @@ async function generateTabulation(){
   }
   renderTabulation();
 }
+function tabMedRanks(){
+  const by={BNGA:[],SANT:[]};
+  tabRows.forEach(r=>by[firstLang(r.student)==="SANT"?"SANT":"BNGA"].push(r));
+  Object.keys(by).forEach(k=>{const l=by[k].slice().sort((a,b)=>b.total-a.total);l.forEach((r,i)=>{r.mRank=(i>0&&r.total===l[i-1].total)?l[i-1].mRank:i+1})});
+}
+function tabRk(r){return document.getElementById("mp_tabSort").value==="mrank"?(r.mRank||r.rank):r.rank}
+function tabSortLabel(){const v=document.getElementById("mp_tabSort").value;return {rank:"Rank-wise",mrank:"Medium-wise Rank",roll:"Section / Roll-wise",mroll:"Medium-wise Roll"}[v]||"Roll-wise"}
 function tabFiltered(){
   const q=normalize(document.getElementById("mp_tabSearch").value).toLowerCase(),
         sx=document.getElementById("mp_tabSex").value,sc=document.getElementById("mp_tabSec").value,
@@ -3984,8 +4041,13 @@ function tabFiltered(){
       (!q||keyOf(s).toLowerCase().includes(q)||nameOf(s).toLowerCase().includes(q));
   });
   const rn=s=>Number(roll(s))||0;
-  rows.sort(so==="rank"?(a,b)=>a.rank-b.rank||String(sec(a.student)).localeCompare(String(sec(b.student)))||rn(a.student)-rn(b.student)
-                       :(a,b)=>String(sec(a.student)).localeCompare(String(sec(b.student)))||rn(a.student)-rn(b.student));
+  const mo=r=>firstLang(r.student)==="SANT"?1:0;
+  const sr=(a,b)=>String(sec(a.student)).localeCompare(String(sec(b.student)))||rn(a.student)-rn(b.student);
+  if(so==="mrank"||so==="mroll") tabMedRanks();
+  rows.sort(so==="rank"?(a,b)=>a.rank-b.rank||sr(a,b)
+           :so==="mrank"?(a,b)=>mo(a)-mo(b)||a.mRank-b.mRank||sr(a,b)
+           :so==="mroll"?(a,b)=>mo(a)-mo(b)||sr(a,b)
+           :sr);
   return rows;
 }
 function renderTabulation(){
@@ -4010,13 +4072,13 @@ function renderTabulation(){
       return full?`<td>${c.w}</td><td>${c.f}</td><td${bad}>${c.t}</td>`:`<td${bad}>${c.t}</td>`;
     }).join("");
     const cls2=r.result==="PASS"?"pass":(r.result==="INCOMPLETE"?"absent":"fail");
-    return `<tr><td>${i+1}</td><td><b>${r.rank}</b></td><td>${escapeHtml(reg(s))}</td><td>${escapeHtml(sec(s))}</td><td>${escapeHtml(roll(s))}</td><td>${escapeHtml(nameOf(s))}</td><td>${escapeHtml(sex(s))}</td>${cells}<td><b>${r.total}</b></td><td>${r.pct.toFixed(2)}</td><td><span class="badge ${cls2}">${r.result}</span></td></tr>`;
+    return `<tr><td>${i+1}</td><td><b>${tabRk(r)}</b></td><td>${escapeHtml(reg(s))}</td><td>${escapeHtml(sec(s))}</td><td>${escapeHtml(roll(s))}</td><td>${escapeHtml(nameOf(s))}</td><td>${escapeHtml(sex(s))}</td>${cells}<td><b>${r.total}</b></td><td>${r.pct.toFixed(2)}</td><td><span class="badge ${cls2}">${r.result}</span></td></tr>`;
   }).join("")||"<tr><td colspan='20'>No students match the filter.</td></tr>";
 }
 function printTabulation(){
   if(!tabRows.length)return alert("Generate the tabulation sheet first.");
   const t=document.getElementById("mp_tabTable").cloneNode(true);
-  const so=document.getElementById("mp_tabSort").value==="rank"?"Rank-wise":"Roll-wise";
+  const so=tabSortLabel();
   const sx=document.getElementById("mp_tabSex").value,sc=document.getElementById("mp_tabSec").value,
         med=(document.getElementById("mp_tabMedium")||{}).value||"ALL";
   const note=tabPending.length?`<p style="text-align:center;color:#b91c1c;font-size:11px">PROVISIONAL — pending: ${tabPending.map(c=>escapeHtml(PROGRAMME[c].name)).join(", ")}</p>`:"";
@@ -4032,7 +4094,7 @@ function exportTabulation(){
   hdr.push("Grand Total","Full Marks","%","Result");
   const aoa=[hdr];
   rows.forEach((r,i)=>{
-    const s=r.student,line=[i+1,r.rank,reg(s),sec(s),roll(s),nameOf(s),sex(s),firstLang(s)==="SANT"?"Santali":"Bengali"];
+    const s=r.student,line=[i+1,tabRk(r),reg(s),sec(s),roll(s),nameOf(s),sex(s),firstLang(s)==="SANT"?"Santali":"Bengali"];
     r.cells.forEach(c=>{if(c.state==="M")line.push(c.w,c.f,c.t);else{const x=c.state==="A"?"AB":"";line.push(x,x,x)}});
     line.push(r.total,r.fm,Number(r.pct.toFixed(2)),r.result);aoa.push(line);
   });
@@ -5629,7 +5691,7 @@ function parseListPages(pages){
   addRpp('printXiTab','xtRpp'); addRpp('MP.printTabulation','mpRpp');
   window.printXiTab=function(){
     if(!xtRows.length){ alert('Generate the tabulation sheet first.'); return; }
-    const f=fromTable($('xtTable')), so=$('xtSort').value==='rank'?'Rank-wise':'Roll / Reg-wise', sx=$('xtSex').value, med=($('xtMedium')||{}).value||'ALL';
+    const f=fromTable($('xtTable')), so=xtSortLabel(), sx=$('xtSex').value, med=($('xtMedium')||{}).value||'ALL';
     printPro({title:'CLASS XI — '+XT_LABEL[xtModeUsed]+(xtSuppMode&&xtModeUsed==='SEM1'?' WITH SUPPLEMENTARY':'')+' — TABULATION SHEET ('+so+')',
       sub:'Medium: '+med+'  |  Sex: '+sx+'  |  Th = Theory, Pr = Practical, Pj = Project, S1/S2 = Semester I/II, AB = Absent, · = subject not taken  |  Pass: 30% in each component'+(xtModeUsed==='COMB'?'  |  Best of Five: 2 languages + best 3 electives = 500':''),
       provisional:xtPending.length?'PROVISIONAL — marks not yet locked for: '+[...new Set(xtPending)].join(', '):'',
@@ -5637,7 +5699,7 @@ function parseListPages(pages){
   };
   if(window.MP) window.MP.printTabulation=function(){
     if(!tabRowsCount()){ alert('Generate the tabulation sheet first.'); return; }
-    const f=fromTable($('mp_tabTable')), so=$('mp_tabSort').value==='rank'?'Rank-wise':'Section / Roll-wise';
+    const f=fromTable($('mp_tabTable')), so=({rank:'Rank-wise',mrank:'Medium-wise Rank',roll:'Section / Roll-wise',mroll:'Medium-wise Roll'})[$('mp_tabSort').value]||'Roll-wise';
     printPro({title:'MP (SE) 2027 SELECTION TEST — TABULATION SHEET ('+so+')',
       sub:'Class X  |  Medium: '+(($('mp_tabMedium')||{}).value||'ALL')+'  |  Section: '+$('mp_tabSec').value+'  |  Sex: '+$('mp_tabSex').value+'  |  Full Marks per subject: 100 (Written 90 + IFE 10)  |  Pass Mark: 25  |  AB = Absent',
       provisional:$('mp_tabBox')&&/PROVISIONAL/.test($('mp_tabBox').textContent)?$('mp_tabBox').textContent.replace(/^⚠\s*/,''):'',
