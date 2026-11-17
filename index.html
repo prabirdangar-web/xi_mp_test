@@ -264,10 +264,13 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
 .rv-title{font-size:15px;color:#475569;margin-top:4px}
 .rv-who{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:14px;line-height:1.7}
 .rv-note{font-size:12px;color:#64748b;margin-top:10px}
+/* ---- viewer (no staff login): only total student count is visible ---- */
+body.viewer-mode .staff-only{display:none!important}
+body.viewer-mode .nav button:not([data-keep]){display:none!important}
 </style>
 </head>
 
-<body>
+<body class="viewer-mode">
 
 <div class="app">
 
@@ -279,7 +282,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
 
   <div class="nav-group-title" id="ngt-xi" onclick="toggleNavGroup('xi')"><span>CLASS XI — SEMESTER</span><i>▾</i></div>
   <div class="nav" id="nav-xi">
-    <button class="active" onclick="showView('dashboard',this)">🏠 Dashboard</button>
+    <button class="active" data-keep="1" onclick="showView('dashboard',this)">🏠 Dashboard</button>
     <button onclick="showView('students',this)">👨‍🎓 Students / Excel</button>
     <button onclick="showView('attendance',this)">📅 Attendance</button>
     <button onclick="showView('attsummary',this)">🧾 Attendance Summary</button>
@@ -294,11 +297,11 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
     <button onclick="showView('analysis',this)">📊 Result Analysis</button>
     <button id="navSubjects" style="display:none" onclick="showView('subjects',this)">⚙️ Subjects (Admin)</button>
     <button id="navStaff" style="display:none" onclick="showView('staffappr',this)">👥 Staff Approvals (Admin)</button>
-    <button onclick="showView('rules',this)">📚 WBCHSE Rules</button>
+    <button data-keep="1" onclick="showView('rules',this)">📚 WBCHSE Rules</button>
   </div>
   <div class="nav-group-title" id="ngt-mp" onclick="toggleNavGroup('mp')"><span>CLASS X — MP (SE) 2027</span><i>▾</i></div>
   <div class="nav" id="nav-mp">
-    <button data-mpview="mp_dashboard" onclick="MP.showView('mp_dashboard',this)">🏠 Dashboard</button>
+    <button data-mpview="mp_dashboard" data-keep="1" onclick="MP.showView('mp_dashboard',this)">🏠 Dashboard</button>
     <button data-mpview="mp_students" onclick="MP.showView('mp_students',this)">👨‍🎓 Class X Students</button>
     <button data-mpview="mp_attendance" onclick="MP.showView('mp_attendance',this)">📅 Attendance</button>
     <button data-mpview="mp_attsummary" onclick="MP.showView('mp_attsummary',this)">🧾 Attendance Summary</button>
@@ -367,15 +370,15 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
       <div class="label">Total Students</div>
       <div class="value blue" id="dashStudents">0</div>
     </div>
-    <div class="card">
+    <div class="card staff-only">
       <div class="label">Subjects</div>
       <div class="value purple" id="dashSubjects">0</div>
     </div>
-    <div class="card">
+    <div class="card staff-only">
       <div class="label">Attendance Records</div>
       <div class="value green" id="dashAttendance">0</div>
     </div>
-    <div class="card">
+    <div class="card staff-only">
       <div class="label">Marks Records</div>
       <div class="value orange" id="dashMarks">0</div>
     </div>
@@ -405,7 +408,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
     </div>
   </div>
 
-  <div class="panel">
+  <div class="panel staff-only">
     <h3>Quick Actions</h3>
     <div class="quick">
       <button onclick="showView('students')">
@@ -423,7 +426,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
     </div>
   </div>
 
-  <div class="panel">
+  <div class="panel staff-only">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
       <h3 style="margin:0">Attendance Summary — Subject-wise (saved attendance)</h3>
       <button class="btn secondary" style="padding:6px 10px" onclick="loadXiDashAtt()">🔄 Refresh</button>
@@ -1011,11 +1014,11 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
   </div>
   <div class="cards" style="margin-top:20px">
     <div class="card"><div class="label">Total Class X Students</div><div class="value blue" id="mp_dashStudents">0</div></div>
-    <div class="card"><div class="label">Attendance Records</div><div class="value green" id="mp_dashAttendance">0</div></div>
-    <div class="card"><div class="label">Marks Records</div><div class="value orange" id="mp_dashMarks">0</div></div>
-    <div class="card"><div class="label">Locked Results</div><div class="value purple" id="mp_dashResults">0</div></div>
+    <div class="card staff-only"><div class="label">Attendance Records</div><div class="value green" id="mp_dashAttendance">0</div></div>
+    <div class="card staff-only"><div class="label">Marks Records</div><div class="value orange" id="mp_dashMarks">0</div></div>
+    <div class="card staff-only"><div class="label">Locked Results</div><div class="value purple" id="mp_dashResults">0</div></div>
   </div>
-  <div class="panel">
+  <div class="panel staff-only">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
       <h3 style="margin:0">Attendance Summary — Subject-wise (saved attendance)</h3>
       <button class="btn secondary" style="padding:6px 10px" onclick="MP.loadDashAtt()">🔄 Refresh</button>
@@ -1025,7 +1028,7 @@ body.result-only .content{padding:14px;max-width:900px;margin:0 auto}
     <div id="mdNote" style="font-size:12px;color:#64748b;margin-top:8px"></div>
   </div>
 
-  <div class="panel">
+  <div class="panel staff-only">
     <h3>Workflow</h3>
     <div class="quick">
       <button onclick="MP.showView('mp_students')"><strong>1. Student Database</strong><span>B.S. Portal ID, Class, Section, Roll, Name and Sex.</span></button>
@@ -1287,6 +1290,9 @@ let marksAttendanceStatus="none"; /* "none" | "unlocked" | "locked" — attendan
 let marksAbsentKeys=new Set();     /* keys of students marked ABSENT in the locked attendance for the selected subject */
 
 function roleIs(...roles){ return roles.includes(String(currentRole||"").toLowerCase()); }
+/* VIEWER = anyone without an approved staff/teacher/invigilator/admin login. Viewers get ONLY the total student count. */
+let viewerStudentCount=0, xiStudentsHidden=false;
+function isViewer(){ return !roleIs("admin","staff","teacher","invigilator"); }
 function isAdmin(){ return roleIs("admin"); }
 function canAttendance(){ return roleIs("admin","staff","teacher","invigilator"); }
 function canMarks(){ return roleIs("admin","staff","teacher"); }
@@ -1389,7 +1395,21 @@ function restrictSubjectSelects(fire){
   });
 }
 const __applyRoleUI0=applyRoleUI;
-applyRoleUI=function(){ __applyRoleUI0.apply(this,arguments); try{restrictSubjectSelects(true);}catch(e){} };
+applyRoleUI=function(){
+  document.body.classList.toggle("viewer-mode",isViewer());
+  __applyRoleUI0.apply(this,arguments);
+  try{restrictSubjectSelects(true);}catch(e){}
+  if(!isViewer() && xiStudentsHidden){ xiStudentsHidden=false; loadStudents(); }
+  if(isViewer()){
+    /* viewer on the Dashboard only: never leave a data view open */
+    const keep=["dashboard","rules","mp_dashboard","rv_view","rvx_view"];
+    const act=document.querySelector(".view.active");
+    if(act && !keep.includes(act.id) && !document.body.classList.contains("result-only")){
+      document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
+      const d=document.getElementById("dashboard"); if(d) d.classList.add("active");
+    }
+  }
+};
 
 async function loadUserRole(user){
   currentUser=user;
@@ -1448,7 +1468,7 @@ async function forgotPassword(){
   try{ await auth.sendPasswordResetEmail(email); alert("Password reset link sent to "+email+". Open that email (check Spam too), set a new password, then Sign In."); }
   catch(e){ alert(e.code==="auth/user-not-found"?"This email is not registered.":"Could not send reset email: "+e.message); }
 }
-async function logoutUser(){ try{ await auth.signOut(); await auth.signInAnonymously(); }catch(e){ alert(e.message); } }
+async function logoutUser(){ try{ await auth.signOut(); await auth.signInAnonymously(); location.reload(); }catch(e){ alert(e.message); } }
 
 auth.onAuthStateChanged(async user=>{
   await loadUserRole(user);
@@ -1474,6 +1494,7 @@ auth.signInAnonymously().then(()=>{
 
 /* NAVIGATION */
 function showView(id,btn){
+  if(isViewer() && !["dashboard","rules"].includes(id)){ alert("Student data is available only after Staff/Admin sign-in."); return; }
   if(id==="subjects" && !isAdmin()){ alert("Only Admin can manage subjects."); return; }
   if(id==="marks" && !canMarks()){ alert("Marks Entry is restricted to authorised Staff/Teacher/Admin accounts."); return; }
   if(id==="combined" && !canResult()){ alert("Combined Result is restricted to authorised Staff/Teacher/Admin accounts."); return; }
@@ -1643,6 +1664,8 @@ async function loadStudents(){
     if(snap.exists && Array.isArray(snap.data().students)){
       students=snap.data().students;
     }
+    viewerStudentCount=students.length;
+    if(isViewer()){ students=[]; xiStudentsHidden=true; } else { xiStudentsHidden=false; }
 
     renderStudents();
     updateDashboard();
@@ -3476,7 +3499,7 @@ async function loadXiAttSummary(){
 
 /* DASHBOARD */
 function updateDashboard(){
-  document.getElementById("dashStudents").textContent=students.length;
+  document.getElementById("dashStudents").textContent=isViewer()?viewerStudentCount:students.length;
   document.getElementById("dashSubjects").textContent=SUBJECTS.length;
   renderSubjectCounts();
   loadXiDashAtt();
@@ -3598,6 +3621,7 @@ const PASS_MARK=25; // Pass mark out of 100 for Class X MP (SE) 2027 Selection T
 const currentExam="MP-SE-2027";
 
 let students=[], attendanceRows=[], marksRows=[], resultRows=[];
+let mpStudentCount=0, mpStudentsHidden=false; /* viewers (no staff login) get only the total */
 let attendanceLocked=false,marksLocked=false;
 let attendanceLockInfo="",marksLockInfo="";
 let marksOwnerUid=null;
@@ -3682,6 +3706,7 @@ async function deleteProgramme(c){
 function setSex(i,v){if(!requireAdmin()){renderStudents();return}const st=students[i];Object.keys(st).forEach(k=>{if(["sex","gender"].includes(normKey(k)))st[k]=v});st["Sex"]=v;renderStudents()}
 
 function showView(id,btn){
+  if(isViewer()&&id!=="mp_dashboard") return alert("Student data is available only after Staff/Admin sign-in.");
   if(id==="mp_programme"&&!isAdmin()) return alert("Programme editing is restricted to Admin.");
   if(id==="mp_marks"&&!canMarks()) return alert("Marks Entry is restricted to Staff/Teacher/Admin.");
   if(id==="mp_result"&&!canResult()) return alert("Result is restricted to Staff/Teacher/Admin.");
@@ -3712,6 +3737,7 @@ function applyMpRoleUI(){
   show("mp_saveStudentsBtn",isAdmin());show("mp_unlockAttendanceBtn",isAdmin());show("mp_unlockMarksBtn",isAdmin());
   [["mp_marks",canMarks()],["mp_result",canResult()],["mp_tabulation",canResult()],["mp_bulk",isAdmin()],["mp_programme",isAdmin()]].forEach(([v,ok])=>{
     const b=document.querySelector('.nav button[data-mpview="'+v+'"]');if(b)b.style.display=ok?"block":"none"});
+  if(!isViewer()&&mpStudentsHidden){mpStudentsHidden=false;loadStudents();}
   renderStudents();
 }
 const _xiApplyRoleUI=applyRoleUI;
@@ -3728,6 +3754,8 @@ async function loadStudents(){
   try{
     const snap=await db.collection("mpStudents").doc("2027").get();
     students=snap.exists&&Array.isArray(snap.data().students)?snap.data().students:[];
+    mpStudentCount=students.length;
+    if(isViewer()){ students=[]; mpStudentsHidden=true; } else { mpStudentsHidden=false; }
   }catch(e){console.warn(e)}
   renderStudents();updateDashboard();
 }
@@ -3945,7 +3973,8 @@ function printTable(bodyId,title){
 }
 
 async function updateDashboard(){
-  document.getElementById("mp_dashStudents").textContent=students.length;
+  document.getElementById("mp_dashStudents").textContent=isViewer()?mpStudentCount:students.length;
+  if(isViewer()) return;
   try{
     const a=await db.collection("mpAttendance").get(),m=await db.collection("mpMarks").get();
     document.getElementById("mp_dashAttendance").textContent=a.size;
