@@ -1107,6 +1107,7 @@ body.viewer-mode .nav button:not([data-keep]){display:none!important}
       <button id="mp_lockAttendanceBtn" class="btn danger" onclick="MP.lockAttendance()">Submit &amp; Lock</button>
       <button id="mp_unlockAttendanceBtn" class="btn secondary" onclick="MP.unlockAttendance()">Admin Unlock</button>
       <button class="btn secondary" onclick="MP.printAttendance()">Print</button>
+      <button class="btn secondary" onclick="MP.printSignatureSheet()">Print Signature Sheet</button>
     </div>
     <div id="mp_attendanceLockBox" class="lockbox">Select a subject.</div>
   </div>
@@ -1292,9 +1293,13 @@ let marksAbsentKeys=new Set();     /* keys of students marked ABSENT in the lock
 function roleIs(...roles){ return roles.includes(String(currentRole||"").toLowerCase()); }
 /* VIEWER = anyone without an approved staff/teacher/invigilator/admin login. Viewers get ONLY the total student count. */
 let viewerStudentCount=0, xiStudentsHidden=false;
-function isViewer(){ return !roleIs("admin","staff","teacher","invigilator"); }
+/* ATTENDANCE + VIEW-ALL ACCOUNTS (Class XI and Class X/MP): may take attendance, print attendance & signature sheets
+   and VIEW every report (marks, results, tabulation, merit lists, analysis) read-only. No marks/result editing, no admin pages. */
+const ATT_VIEW_EMAILS=["vtc5006@gmail.com"];
+function isViewer(){ return !roleIs("admin","staff","teacher","invigilator","attview"); }
+function canViewAll(){ return roleIs("admin","staff","teacher","attview"); }
 function isAdmin(){ return roleIs("admin"); }
-function canAttendance(){ return roleIs("admin","staff","teacher","invigilator"); }
+function canAttendance(){ return roleIs("admin","staff","teacher","invigilator","attview"); }
 function canMarks(){ return roleIs("admin","staff","teacher"); }
 function canResult(){ return roleIs("admin","staff","teacher"); }
 function canEdit(){ return canAttendance() || canMarks() || canResult(); }
@@ -1427,6 +1432,14 @@ async function loadUserRole(user){
     console.warn("Existing staff role lookup failed:",e);
     currentRole="viewer";
   }
+  /* Attendance + view-all accounts (by email) — never downgrades admin/staff/teacher */
+  try{
+    const em=String(user.email||"").trim().toLowerCase();
+    if(em && ATT_VIEW_EMAILS.includes(em) && !roleIs("admin","staff","teacher")){
+      currentRole="attview";
+      currentUserProfile=Object.assign({},currentUserProfile,{role:"attview",assignedXI:["*"],assignedMP:["*"],assignedSubjects:["*"],assignedSex:["ALL"],medium:[]});
+    }
+  }catch(e){}
   applyRoleUI();
 }
 
@@ -1436,6 +1449,7 @@ function applyRoleUI(){
   if(badge) badge.textContent=currentRole.toUpperCase();
   if(msg){
     if(isAdmin()) msg.textContent="Admin: full control, unlock, correct and finalize.";
+    else if(roleIs("attview")) msg.textContent="Attendance & View: take attendance, print attendance/signature sheets (Class XI and Class X) and view all reports read-only.";
     else if(roleIs("invigilator")) msg.textContent="Invigilator: exam-room attendance only; submitted attendance is locked.";
     else if(roleIs("staff","teacher")) msg.textContent="Staff/Teacher: assigned attendance, marks and result work; locked records cannot be edited/deleted.";
     else msg.textContent="Read-only until an authorised existing staff account is signed in.";
@@ -1448,8 +1462,8 @@ function applyRoleUI(){
 
   const marksSection=document.querySelector('.nav button[onclick*="showView(\'marks\'"]');
   const resultSection=document.querySelector('.nav button[onclick*="showView(\'combined\'"]');
-  if(marksSection) marksSection.style.display=canMarks()?"block":"none";
-  if(resultSection) resultSection.style.display=canResult()?"block":"none";
+  if(marksSection) marksSection.style.display=canViewAll()?"block":"none";
+  if(resultSection) resultSection.style.display=canViewAll()?"block":"none";
 
   updateAttendanceLockUI(); updateMarksLockUI(); updateResultLockUI();
   renderStudents(); renderSubjects(); renderAttendance(); if(combinedRows.length) renderCombined();
@@ -1496,13 +1510,13 @@ auth.signInAnonymously().then(()=>{
 function showView(id,btn){
   if(isViewer() && !["dashboard","rules"].includes(id)){ alert("Student data is available only after Staff/Admin sign-in."); return; }
   if(id==="subjects" && !isAdmin()){ alert("Only Admin can manage subjects."); return; }
-  if(id==="marks" && !canMarks()){ alert("Marks Entry is restricted to authorised Staff/Teacher/Admin accounts."); return; }
-  if(id==="combined" && !canResult()){ alert("Combined Result is restricted to authorised Staff/Teacher/Admin accounts."); return; }
+  if(id==="marks" && !canViewAll()){ alert("Marks Entry is restricted to authorised Staff/Teacher/Admin accounts."); return; }
+  if(id==="combined" && !canViewAll()){ alert("Combined Result is restricted to authorised Staff/Teacher/Admin accounts."); return; }
   if(id==="attsummary" && !canAttendance()){ alert("Attendance Summary is restricted to authorised accounts."); return; }
-  if(id==="xisupp" && !canResult()){ alert("Supplementary List is restricted to authorised Staff/Teacher/Admin accounts."); return; }
-  if(id==="xitab" && !canResult()){ alert("Tabulation is restricted to authorised Staff/Teacher/Admin accounts."); return; }
-  if(id==="xires" && !canResult()){ alert("Result Sheet is restricted to authorised Staff/Teacher/Admin accounts."); return; }
-  if(id==="xirank" && !canResult()){ alert("Merit List is restricted to authorised Staff/Teacher/Admin accounts."); return; }
+  if(id==="xisupp" && !canViewAll()){ alert("Supplementary List is restricted to authorised Staff/Teacher/Admin accounts."); return; }
+  if(id==="xitab" && !canViewAll()){ alert("Tabulation is restricted to authorised Staff/Teacher/Admin accounts."); return; }
+  if(id==="xires" && !canViewAll()){ alert("Result Sheet is restricted to authorised Staff/Teacher/Admin accounts."); return; }
+  if(id==="xirank" && !canViewAll()){ alert("Merit List is restricted to authorised Staff/Teacher/Admin accounts."); return; }
   if((id==="xibulk"||id==="xischool") && !isAdmin()){ alert("This page is for Admin only."); return; }
   document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
   document.getElementById(id).classList.add("active");
@@ -2694,7 +2708,7 @@ function openPrintWindow({docTitle,headerLines,columns,rowsHtml,footerLines,orie
 
 /* COMBINED RESULT (FM-100): Sem I Theory + Sem II Theory + Project/Practical */
 async function generateCombined(){
-  if(!requireResult()) return;
+  if(!canViewAll()){ alert("Result view permission is not available for this account."); return; }
   const subject=document.getElementById("combSubject").value;
   if(!subject){ alert("Select a subject first."); return; }
   if(!students.length){ alert("Please import/load XI-REG students first."); return; }
@@ -2850,7 +2864,7 @@ let xtRows=[],xtCols=[],xtPending=[],xtModeUsed="SEM1",xtSuppMode=false;
 const XT_LABEL={SEM1:"SEMESTER I",SEM2:"SEMESTER II",COMB:"COMBINED (SEM I + SEM II + PROJECT/PRACTICAL)"};
 function xtPassMin(max){return Math.ceil(max*0.30)}
 async function generateXiTab(){
-  if(!requireResult()) return;
+  if(!canViewAll()){ alert("Result view permission is not available for this account."); return; }
   if(!students.length){ alert("Please import/load XI-REG students first."); return; }
   const mode0=document.getElementById("xtMode").value; const mode=(mode0==="SEM1S")?"SEM1":mode0; xtModeUsed=mode; xtSuppMode=(mode0==="SEM1S"||mode0==="COMB");
   const box=document.getElementById("xtBox"); box.className="lockbox"; box.textContent="Loading marks…";
@@ -3708,10 +3722,10 @@ function setSex(i,v){if(!requireAdmin()){renderStudents();return}const st=studen
 function showView(id,btn){
   if(isViewer()&&id!=="mp_dashboard") return alert("Student data is available only after Staff/Admin sign-in.");
   if(id==="mp_programme"&&!isAdmin()) return alert("Programme editing is restricted to Admin.");
-  if(id==="mp_marks"&&!canMarks()) return alert("Marks Entry is restricted to Staff/Teacher/Admin.");
-  if(id==="mp_result"&&!canResult()) return alert("Result is restricted to Staff/Teacher/Admin.");
+  if(id==="mp_marks"&&!canViewAll()) return alert("Marks Entry is restricted to Staff/Teacher/Admin.");
+  if(id==="mp_result"&&!canViewAll()) return alert("Result is restricted to Staff/Teacher/Admin.");
   if(id==="mp_attsummary"&&!canAttendance()) return alert("Attendance Summary is restricted to authorised accounts.");
-  if(id==="mp_tabulation"&&!canResult()) return alert("Tabulation is restricted to Staff/Teacher/Admin.");
+  if(id==="mp_tabulation"&&!canViewAll()) return alert("Tabulation is restricted to Staff/Teacher/Admin.");
   if(id==="mp_bulk"&&!isAdmin()) return alert("Bulk marksheets are for Admin only.");
   document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
   document.getElementById(id).classList.add("active");
@@ -3735,7 +3749,7 @@ populateSubjects();
 function applyMpRoleUI(){
   const show=(id,ok)=>{const el=document.getElementById(id);if(el)el.style.display=ok?"inline-block":"none"};
   show("mp_saveStudentsBtn",isAdmin());show("mp_unlockAttendanceBtn",isAdmin());show("mp_unlockMarksBtn",isAdmin());
-  [["mp_marks",canMarks()],["mp_result",canResult()],["mp_tabulation",canResult()],["mp_bulk",isAdmin()],["mp_programme",isAdmin()]].forEach(([v,ok])=>{
+  [["mp_marks",canViewAll()],["mp_result",canViewAll()],["mp_tabulation",canViewAll()],["mp_bulk",isAdmin()],["mp_programme",isAdmin()]].forEach(([v,ok])=>{
     const b=document.querySelector('.nav button[data-mpview="'+v+'"]');if(b)b.style.display=ok?"block":"none"});
   if(!isViewer()&&mpStudentsHidden){mpStudentsHidden=false;loadStudents();}
   renderStudents();
@@ -3857,7 +3871,7 @@ async function unlockAttendance(){
 }
 
 async function loadMarks(){
-  if(!requireMarks())return;
+  if(!canViewAll()){alert("Marks view permission is not available for this account.");return;}
   const subject=document.getElementById("mp_marksSubject").value;if(!subject)return;
   const aid=subject+"_"+PROGRAMME[subject].date.replace(/-/g,"");
   try{
@@ -3935,7 +3949,7 @@ async function unlockMarks(){
 }
 
 async function generateResult(){
-  if(!canResult())return alert("Result permission required.");
+  if(!canViewAll())return alert("Result view permission is not available for this account.");
   const s=document.getElementById("mp_resultSubject").value;if(!s)return;
   const snap=await db.collection("mpMarks").doc(s+"_"+currentExam).get();
   const box=document.getElementById("mp_resultLockBox");
@@ -3965,6 +3979,28 @@ function printResult(){
   printTable("mp_resultBody","MP (SE) 2027 — Result — "+escapeHtml(t("mp_resultSubject"))+" — "+escapeHtml(t("mp_resultOrder"))+(t("mp_resultMedium")!=="All Mediums"?" — "+escapeHtml(t("mp_resultMedium")):""));
 }
 function printAttendance(){printTable("mp_attendanceBody","MP (SE) 2027 — Attendance")}
+/* Subject-wise blank Signature Sheet (Class X / MP SE 2027) — students sign against their names in the exam room */
+function printSignatureSheet(){
+  const subject=document.getElementById("mp_attSubject").value;
+  if(!subject){alert("Select the exam subject first.");return}
+  if(!students.length){alert("Class X students are not loaded yet.");return}
+  const date=PROGRAMME[subject]?PROGRAMME[subject].date:"";
+  const eligible=students.filter(s=>takesSubject(s,subject));
+  if(!eligible.length){alert("No students found for this subject.");return}
+  const rowsHtml=eligible.map((s,i)=>`<tr><td class="c-sl">${i+1}</td><td class="c-reg">${escapeHtml(String(reg(s)||"").toUpperCase())}</td><td class="c-sec">${escapeHtml(String(sec(s)||"").toUpperCase())}</td><td class="c-sl">${escapeHtml(String(roll(s)||""))}</td><td class="c-name">${escapeHtml(String(nameOf(s)||"").toUpperCase())}</td><td class="c-sex">${escapeHtml(String(sex(s)||"").toUpperCase())}</td><td class="sigcell sigwide"></td></tr>`).join("");
+  openPrintWindow({
+    docTitle:`Signature Sheet - ${PROGRAMME[subject].name} - ${date}`,
+    uppercase:true,tallRows:true,
+    headerLines:[
+      schoolHdrHtml(false),
+      `<div class="exam">MP (SE) 2027 — Attendance / Signature Sheet</div>`,
+      `<div class="meta"><span><b>Subject:</b> ${escapeHtml(PROGRAMME[subject].name)}</span><span><b>Date:</b> ${escapeHtml(date)}</span><span><b>Class:</b> X</span></div>`
+    ],
+    columns:["SL","B.S. Portal ID","Sec","Roll","Name","Sex","Signature of Student"],
+    rowsHtml,
+    footerLines:[`<div class="sigline"><span>Invigilator's Signature: ______________________</span><span>Date: ______________</span></div>`]
+  });
+}
 function printMarks(){printTable("mp_marksBody","MP (SE) 2027 — Marks Entry")}
 function printStudents(){printTable("mp_studentBody","MP (SE) 2027 — Student List")}
 function printTable(bodyId,title){
@@ -4009,7 +4045,7 @@ function tabBuildCols(){
   return cols;
 }
 async function generateTabulation(){
-  if(!canResult())return alert("Result permission required.");
+  if(!canViewAll())return alert("Result view permission is not available for this account.");
   if(!students.length)return alert("Load the Class X student database first.");
   const box=document.getElementById("mp_tabBox");box.className="lockbox";box.textContent="Loading marks…";
   const maps={};tabPending=[];
@@ -4243,7 +4279,7 @@ function bulkPrintAll(){
   window.TFHS_MS.print(html,"Class X Marksheets — "+document.getElementById("mp_bSec").selectedOptions[0].text,{css:"@page{size:A4 portrait;margin:10mm}.pg{page-break-after:always;break-after:page}.pg:last-child{page-break-after:auto;break-after:auto}"});
 }
 
-window.MP={getStudents:()=>students,bulkGenerate,bulkPreview,bulkPrintAll,loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStudents,renderStudents,deleteStudent,setLang,setSex,editProgramme,deleteProgramme,printStudents,loadAttendance,renderAttendance,setAttendance,markAllAttendance,saveAttendance,lockAttendance,unlockAttendance,printAttendance,loadMarks,renderMarks,setMark,saveMarks,lockMarks,unlockMarks,printMarks,generateResult,renderResult,printResult,generateTabulation,renderTabulation,printTabulation,exportTabulation};
+window.MP={getStudents:()=>students,bulkGenerate,bulkPreview,bulkPrintAll,loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStudents,renderStudents,deleteStudent,setLang,setSex,editProgramme,deleteProgramme,printStudents,loadAttendance,renderAttendance,setAttendance,markAllAttendance,saveAttendance,lockAttendance,unlockAttendance,printAttendance,printSignatureSheet,loadMarks,renderMarks,setMark,saveMarks,lockMarks,unlockMarks,printMarks,generateResult,renderResult,printResult,generateTabulation,renderTabulation,printTabulation,exportTabulation};
 })();
 </script>
 
@@ -5743,7 +5779,7 @@ function parseListPages(pages){
   let SP=null;
   const rollN=st=>Number(getStudentRoll(st))||0;
   async function spGenerate(){
-    if(!canResult()){ alert('Result permission required.'); return; }
+    if(!canViewAll()){ alert('Result view permission is not available for this account.'); return; }
     if(!students.length){ alert('Please load the Class XI students first.'); return; }
     const box=$('spBox'); box.className='lockbox'; box.textContent='Loading Semester I marks…';
     const subs=Object.keys(SCHEMES).filter(c=>subjectColumnExistsInData(c)&&students.some(st=>studentTakesSubject(st,c))).sort((a,b)=>oi(a)-oi(b));
