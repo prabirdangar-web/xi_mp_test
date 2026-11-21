@@ -1048,6 +1048,7 @@ body.viewer-mode .nav button:not([data-keep]){display:none!important}
       <button class="btn" onclick="MP.importExcel()">Import Excel</button>
       <button id="mp_saveStudentsBtn" class="btn success" onclick="MP.saveStudents()">Save Students</button>
       <button class="btn secondary" onclick="MP.addStudent()">Add Student</button>
+      <button class="btn secondary" onclick="MP.addPendingStudent()" title="Opens the Add Student form pre-filled from Student_details.pdf (SURYA SAREN) for review before saving">➕ Add SURYA SAREN (from PDF)</button>
       <button id="mp_importDobBtn" class="btn warning" style="display:none" onclick="document.getElementById('mp_dobFile').click()" title="Adds Date of Birth from the student list PDF where missing">📅 Import DOB (PDF)</button>
       <input type="file" id="mp_dobFile" accept=".pdf,.xlsx,.xls,.csv,.json" style="display:none">
       <button class="btn secondary" onclick="MP.printStudents()">Print</button>
@@ -3867,11 +3868,117 @@ function importExcel(){
   };
   reader.readAsArrayBuffer(file);
 }
+/* ---------- Add / Edit student form (replaces the old blank-row add; every field is now typeable) ---------- */
+const MPF_PENDING={"B.S. Portal ID":"01784919000031","Class":"X","Section":"A","Roll":"500","Name":"SURYA SAREN","Sex":"Male","1st Language":"BNGA","DOB":"26-09-2009","Father's Name":"BUDDHADEB SAREN","Mother's Name":"CHHABI SAREN","Category":"ST","Mobile":"8927491641"};
+const MPF_FIELDS=[
+  {id:"reg",label:"B.S. Portal ID",keys:["B.S. Portal ID","BS Portal ID","Portal ID","Reg No","Registration No","Registration","RegNo","Registration Number"]},
+  {id:"name",label:"Name of Student",keys:["Name","Student Name","Candidate Name"]},
+  {id:"cls",label:"Class",keys:["Class","Class X","Standard"]},
+  {id:"sec",label:"Section",keys:["Section","Sec","Section Name"],sel:["A","B"]},
+  {id:"roll",label:"Roll No.",keys:["Roll","Roll No","Roll Number"]},
+  {id:"sex",label:"Sex",keys:["Sex","Gender"],sel:["Male","Female"]},
+  {id:"lang",label:"1st Language",keys:["1st Language","First Language","1st Lang","Language","Medium","L1"],sel:[["BNGA","Bengali"],["SANT","Santali"]]},
+  {id:"dob",label:"Date of Birth (DD-MM-YYYY)",keys:["DOB","Date of Birth","Date Of Birth"]},
+  {id:"father",label:"Father's Name",keys:["Father's Name","Father Name","Father","Guardian","Guardian's Name"]},
+  {id:"mother",label:"Mother's Name",keys:["Mother's Name","Mother Name","Mother"]},
+  {id:"cat",label:"Social Category",keys:["Category","Social Category","Social Catagory","Caste"],sel:["","GEN","SC","ST","OBC-A","OBC-B"]},
+  {id:"mob",label:"Mobile No.",keys:["Mobile","Mobile No","Mobile Number","Phone"]}
+];
+function mpfCurrent(st,f){
+  if(f.id==="lang")return firstLang(st);
+  if(f.id==="sex")return sex(st)||"";
+  if(f.id==="dob")return mpbDobSafe(st);
+  if(f.id==="cls")return cls(st);
+  if(f.id==="sec")return sec(st);
+  return String(val(st,f.keys)||"");
+}
+function mpbDobSafe(s){try{return typeof mpbDob==="function"?mpbDob(s):String(val(s,["DOB","Date of Birth"])||"")}catch(e){return""}}
+function mpfSetKey(st,f,v){
+  const hit=Object.keys(st).find(k=>f.keys.some(x=>normKey(x)===normKey(k)));
+  st[hit||f.keys[0]]=v;
+}
+function mpfNormId(v){return String(v||"").replace(/\D/g,"").replace(/^0+/,"")}
+function mpfDup(o,idx){
+  const id=mpfNormId(o.reg);
+  if(id&&students.some((x,i)=>i!==idx&&mpfNormId(reg(x))===id))return"A student with this B.S. Portal ID already exists.";
+  if(o.roll&&students.some((x,i)=>i!==idx&&String(roll(x)).trim()===o.roll&&String(cls(x)).trim().toUpperCase()===o.cls.toUpperCase()&&String(sec(x)).trim().toUpperCase()===o.sec.toUpperCase()))return"Roll "+o.roll+" is already used in Class "+o.cls+"-"+o.sec+".";
+  return"";
+}
+function studentForm(idx,prefill){
+  if(!requireAdmin())return;
+  const isNew=idx<0;
+  const st=isNew?{}:students[idx];
+  closeModal();
+  const d=document.createElement("div");d.id="modalBg";
+  d.style.cssText="position:fixed;inset:0;background:#0008;z-index:100;display:flex;align-items:center;justify-content:center;padding:15px";
+  const cur=f=>{
+    if(isNew){
+      const p=prefill||{};
+      const k=Object.keys(p).find(x=>f.keys.some(y=>normKey(y)===normKey(x)));
+      if(k)return String(p[k]);
+      return f.id==="cls"?"X":f.id==="sec"?"A":f.id==="lang"?"BNGA":"";
+    }
+    return mpfCurrent(st,f);
+  };
+  const ctl=f=>{
+    const v=cur(f);
+    if(f.sel){
+      const opts=f.sel.map(o=>Array.isArray(o)?o:[o,o||"—"]);
+      if(v&&!opts.some(o=>o[0]===v))opts.push([v,v]);
+      return`<select id="mpf_${f.id}" style="width:100%">${opts.map(o=>`<option value="${escapeHtml(o[0])}"${o[0]===v?" selected":""}>${escapeHtml(o[1])}</option>`).join("")}</select>`;
+    }
+    return`<input id="mpf_${f.id}" type="text" value="${escapeHtml(v)}" style="width:100%" autocomplete="off">`;
+  };
+  d.innerHTML=`<div class="panel" style="width:640px;max-width:100%;max-height:92vh;overflow:auto;margin:0">
+    <h3>${isNew?"Add Student — Class X (MP SE 2027)":"Edit Student"}</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">${MPF_FIELDS.map(f=>`<div class="field"><label>${escapeHtml(f.label)}</label>${ctl(f)}</div>`).join("")}</div>
+    <div style="font-size:12px;color:#64748b;margin-top:8px">Section A = Bengali medium, Section B = Santali medium (changes automatically with 1st Language; you can still override it).</div>
+    <div class="toolbar" style="margin-top:14px"><button class="btn success" id="mpfSave">Save</button><button class="btn light" onclick="closeModal()">Cancel</button></div></div>`;
+  document.body.appendChild(d);
+  const g=id=>document.getElementById("mpf_"+id);
+  g("lang").onchange=()=>{g("sec").value=g("lang").value==="SANT"?"B":"A"};
+  document.getElementById("mpfSave").onclick=async()=>{
+    const btn=document.getElementById("mpfSave");btn.disabled=true;
+    const o={};MPF_FIELDS.forEach(f=>o[f.id]=g(f.id).value.trim());
+    o.name=o.name.toUpperCase();o.father=o.father.toUpperCase();o.mother=o.mother.toUpperCase();
+    if(o.dob){
+      const m=/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/.exec(o.dob);
+      if(!m){alert("Date of Birth must be DD-MM-YYYY.");btn.disabled=false;return}
+      o.dob=m[1].padStart(2,"0")+"-"+m[2].padStart(2,"0")+"-"+m[3];
+    }
+    if(o.reg&&!/^\d{1,14}$/.test(o.reg)){alert("B.S. Portal ID must be digits only.");btn.disabled=false;return}
+    if(!o.name){alert("Enter the student's name.");btn.disabled=false;return}
+    if(!o.roll){alert("Enter the Roll No.");btn.disabled=false;return}
+    if(!o.cls)o.cls="X";if(!o.sec)o.sec="A";
+    const dup=mpfDup(o,idx);if(dup){alert(dup);btn.disabled=false;return}
+    let backup=null;
+    if(isNew){
+      const rec={sl:students.length+1};
+      MPF_FIELDS.forEach(f=>{if(o[f.id]!==""||["reg","name","cls","sec","roll","sex","lang"].includes(f.id))rec[f.keys[0]]=o[f.id]});
+      students.push(rec);
+    }else{
+      backup=JSON.parse(JSON.stringify(students[idx]));
+      MPF_FIELDS.forEach(f=>{const had=Object.keys(st).some(k=>f.keys.some(x=>normKey(x)===normKey(k)));if(had||o[f.id]!=="")mpfSetKey(st,f,o[f.id])});
+    }
+    try{
+      await db.collection("mpStudents").doc("2027").set({exam:currentExam,students,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+      closeModal();renderStudents();updateDashboard();
+    }catch(e){
+      if(isNew)students.pop();else{Object.keys(students[idx]).forEach(k=>delete students[idx][k]);Object.assign(students[idx],backup)}
+      alert("Save failed: "+e.message);btn.disabled=false;renderStudents();
+    }
+  };
+}
 function addStudent(){
   if(!requireAdmin())return;
-  students.push({sl:students.length+1,"B.S. Portal ID":"","Class":"X","Section":"A","Roll":"","Name":"","Sex":"","1st Language":"BNGA"});
-  renderStudents();
+  if(!students.length&&!confirm("No students are loaded. Saving now would create a new list containing only this student. Continue?"))return;
+  studentForm(-1);
 }
+function addPendingStudent(){
+  if(!requireAdmin())return;
+  studentForm(-1,MPF_PENDING);
+}
+function editStudent(i){studentForm(i)}
 function renderStudents(){
   const q=normalize(document.getElementById("mp_studentSearch").value).toLowerCase();
   const body=document.getElementById("mp_studentBody");
@@ -3879,7 +3986,7 @@ function renderStudents(){
   document.getElementById("mp_studentHead").innerHTML="<tr><th>SL</th><th>B.S. Portal ID</th><th>Class</th><th>Sec</th><th>Roll</th><th>Name</th><th>Sex</th><th>1st Language</th>"+(isAdmin()?"<th>Action</th>":"")+"</tr>";
   body.innerHTML=filtered.map((s,i)=>{
     const idx=students.indexOf(s);
-    return `<tr><td>${i+1}</td><td>${escapeHtml(reg(s))}</td><td>${escapeHtml(cls(s))}</td><td>${escapeHtml(sec(s))}</td><td>${escapeHtml(roll(s))}</td><td>${escapeHtml(nameOf(s))}</td><td>${isAdmin()?`<select onchange="MP.setSex(${idx},this.value)"><option value=""${normSex(sex(s))?"":" selected"}>—</option><option value="Male"${normSex(sex(s))==="Male"?" selected":""}>Male</option><option value="Female"${normSex(sex(s))==="Female"?" selected":""}>Female</option></select>`:escapeHtml(sex(s))}</td><td>${isAdmin()?`<select onchange="MP.setLang(${idx},this.value)"><option value="BNGA"${firstLang(s)==="BNGA"?" selected":""}>Bengali</option><option value="SANT"${firstLang(s)==="SANT"?" selected":""}>Santali</option></select>`:(firstLang(s)==="SANT"?"Santali":"Bengali")}</td>${isAdmin()?`<td><button class="btn danger" style="padding:6px 9px" onclick="MP.deleteStudent(${idx})">Delete</button></td>`:""}</tr>`;
+    return `<tr><td>${i+1}</td><td>${escapeHtml(reg(s))}</td><td>${escapeHtml(cls(s))}</td><td>${escapeHtml(sec(s))}</td><td>${escapeHtml(roll(s))}</td><td>${escapeHtml(nameOf(s))}</td><td>${isAdmin()?`<select onchange="MP.setSex(${idx},this.value)"><option value=""${normSex(sex(s))?"":" selected"}>—</option><option value="Male"${normSex(sex(s))==="Male"?" selected":""}>Male</option><option value="Female"${normSex(sex(s))==="Female"?" selected":""}>Female</option></select>`:escapeHtml(sex(s))}</td><td>${isAdmin()?`<select onchange="MP.setLang(${idx},this.value)"><option value="BNGA"${firstLang(s)==="BNGA"?" selected":""}>Bengali</option><option value="SANT"${firstLang(s)==="SANT"?" selected":""}>Santali</option></select>`:(firstLang(s)==="SANT"?"Santali":"Bengali")}</td>${isAdmin()?`<td style="white-space:nowrap"><button class="btn light" style="padding:6px 9px" onclick="MP.editStudent(${idx})">✏️ Edit</button> <button class="btn danger" style="padding:6px 9px" onclick="MP.deleteStudent(${idx})">Delete</button></td>`:""}</tr>`;
   }).join("")||"<tr><td colspan='9'>No students loaded.</td></tr>";
 }
 function deleteStudent(i){if(!requireAdmin())return;if(confirm("Delete this student?")){students.splice(i,1);students.forEach((s,i)=>s.sl=i+1);renderStudents()}}
@@ -4373,7 +4480,7 @@ function bulkPrintAll(){
   window.TFHS_MS.print(html,"Class X Marksheets — "+document.getElementById("mp_bSec").selectedOptions[0].text,{css:"@page{size:A4 portrait;margin:10mm}.pg{page-break-after:always;break-after:page}.pg:last-child{page-break-after:auto;break-after:auto}"});
 }
 
-window.MP={getStudents:()=>students,bulkGenerate,bulkPreview,bulkPrintAll,loadDashAtt,loadAttSummary,showView,importExcel,addStudent,saveStudents,renderStudents,deleteStudent,setLang,setSex,editProgramme,deleteProgramme,printStudents,loadAttendance,renderAttendance,setAttendance,markAllAttendance,saveAttendance,lockAttendance,unlockAttendance,printAttendance,printSignatureSheet,printAllSignatureSheet,loadMarks,renderMarks,setMark,saveMarks,lockMarks,unlockMarks,printMarks,generateResult,renderResult,printResult,generateTabulation,renderTabulation,printTabulation,exportTabulation};
+window.MP={getStudents:()=>students,bulkGenerate,bulkPreview,bulkPrintAll,loadDashAtt,loadAttSummary,showView,importExcel,addStudent,addPendingStudent,editStudent,saveStudents,renderStudents,deleteStudent,setLang,setSex,editProgramme,deleteProgramme,printStudents,loadAttendance,renderAttendance,setAttendance,markAllAttendance,saveAttendance,lockAttendance,unlockAttendance,printAttendance,printSignatureSheet,printAllSignatureSheet,loadMarks,renderMarks,setMark,saveMarks,lockMarks,unlockMarks,printMarks,generateResult,renderResult,printResult,generateTabulation,renderTabulation,printTabulation,exportTabulation};
 })();
 </script>
 
